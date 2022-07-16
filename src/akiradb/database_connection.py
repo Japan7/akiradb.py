@@ -1,0 +1,30 @@
+import asyncpg
+
+from .exceptions.not_connected_exception import AkiraNotConnectedException
+
+class DatabaseConnection():
+    def __init__(self, hostname='localhost', port=5432, database='test_db', username='user', password='password'):
+        self.hostname = hostname
+        self.port = port
+        self.database = database
+        self.user = username
+        self.password = password
+
+        self._conn = None
+
+    async def connect(self):
+        self._conn = await asyncpg.connect(host=self.hostname, port=self.port, user=self.user, password=self.password, database=self.database)
+
+    async def execute(self, command):
+        if not self._conn:
+            raise AkiraNotConnectedException()
+        
+        return await self._conn.execute(command)
+
+    async def close(self):
+        if not self._conn:
+            raise AkiraNotConnectedException()
+
+        await self._conn.close()
+        self._conn = None
+

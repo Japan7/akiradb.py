@@ -29,20 +29,52 @@ async def main():
 # class Person2(Model):
 #     def __init__(self, name: str):
 #         self.name = name
-# 
+#
 #     spouses: OneToManyRelationship["Person2"]
 #     spouses_invert: ManyToOneRelationship["Person2"]
-# 
-# 
+#
+#
 # async def main2():
 #     await Model._database_connection.connect()
-# 
+#
 #     person1 = Person2(name="Nana-chan")
 #     await person1.save()
-# 
+#
 #     person2 = Person2(name="Senpai-kun")
 #     person2.spouses.add(person1)
 #     await person2.save()
+
+
+# from dataclasses import dataclass
+# from typing import ClassVar, Generic, TypeVar
+#
+# T = TypeVar('T')
+#
+#
+# def relation(cls):
+#     return ClassVar[cls]
+#
+#
+# class Relation(Generic[T]):
+#
+#     def add(self, element: T):
+#         pass
+#
+#
+# class Relation2(Relation['Person']):
+#     since: str
+#
+#
+# @dataclass
+# class Person:
+#     name: str
+#
+#     spouses = Relation['Person']()
+#
+#
+# test = Person("a")
+#
+# test.spouses.add(Person("b"))
 
 
 if __name__ == '__main__':

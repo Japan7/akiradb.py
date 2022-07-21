@@ -71,7 +71,9 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
         Many.__init__(self, *args, **kwargs)
         self._properties: list[TProperties] = []
 
-    def add(self, element: TModel, properties: TProperties, create_in_db=True):
+    def add(self, element: TModel,  # type: ignore[override]
+            properties: TProperties,
+            create_in_db=True):
         if self._source:
             self._source._operations_queue.append(self._link(self._source, element, properties))
             if self._bidirectionnal:
@@ -89,7 +91,7 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
         One.__init__(self, *args, **kwargs)
         self._properties: TProperties | None = None
 
-    def set(self, element: TModel, properties: TProperties):
+    def set(self, element: TModel, properties: TProperties):  # type: ignore[override]
         super().set(element)
         self._properties = properties
 
@@ -97,4 +99,4 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
 def relation(name: str, cls: Type[TRelation], invert=None, bidirectionnal=False) -> TRelation:
     return field(default_factory=partial(cls, name=name, invert=invert,
                                          bidirectionnal=bidirectionnal),
-                 init=False, metadata={'type': TRelation})
+                 init=False, metadata={'type': TRelation})  # type: ignore[misc]

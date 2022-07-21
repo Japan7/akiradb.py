@@ -1,9 +1,9 @@
-from dataclasses import field
+from dataclasses import dataclass, field
 from functools import partial
-from typing import Generic, Type, TypeVar, Union
+from typing import Generic, Type, TypeVar, Union, cast
 
 from akiradb.model.base_model import BaseModel
-
+from akiradb.model.utils import __dataclass_transform__
 
 TModel = TypeVar('TModel', bound=BaseModel)
 
@@ -13,6 +13,7 @@ class Relation(Generic[TModel]):
         self._name = name
         self._invert = invert
         self._bidirectionnal = bidirectionnal
+
 
 TRelation = TypeVar('TRelation', bound=Relation)
 
@@ -35,8 +36,17 @@ class One(Relation[TModel]):
         self._element = element
 
 
-class Properties():
+@__dataclass_transform__()
+class MetaProperties(type):
+
+    def __new__(cls, name, bases, dct):
+        instance = cast(Type, super().__new__(cls, name, bases, dct))
+        return dataclass(instance)
+
+
+class Properties(metaclass=MetaProperties):
     pass
+
 
 TProperties = TypeVar('TProperties', bound=Properties)
 
@@ -62,5 +72,6 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
 
 
 def relation(name: str, cls: Type[TRelation], invert=None, bidirectionnal=False) -> TRelation:
-    return field(default_factory=partial(cls, name=name, invert=invert, bidirectionnal=bidirectionnal), init=False, metadata={'type': TRelation})
-
+    return field(default_factory=partial(cls, name=name, invert=invert,
+                                         bidirectionnal=bidirectionnal),
+                 init=False, metadata={'type': TRelation})

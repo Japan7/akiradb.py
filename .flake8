@@ -1,0 +1,31 @@
+[flake8]
+max-line-length = 99
+ignore =
+    # spaces around keywords
+    E251,
+    # lambda expressions
+    E731,
+    # line break before binary operator
+    W503,
+    # line break after binary operator
+    W504,
+    # blank line at end of file
+    W391,
+    # whitespace around arithmetic operator
+    E226,
+    # ambiguous variable name
+    E741,
+    # do not perform function calls in default arguments
+    B008,
+
+per-file-ignores =
+    __init__.py:
+        # imported but unused
+        F401,
+        # unable to detect undefined names
+        F403,
+
+    # comments should start with space
+    example.local_settings.py: E265,
+
+exclude = .git,.venv,__pycache__

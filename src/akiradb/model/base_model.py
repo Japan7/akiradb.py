@@ -1,37 +1,45 @@
-import dataclasses
+from dataclasses import Field
 
 from typing import Any
 
 from akiradb.database_connection import DatabaseConnection
 
 
-class BaseModel():
-    _database_connection: DatabaseConnection
+class MetaModel(type):
+    def __new__(cls, name, bases, dct):
+        for (name, value) in dct.items():
+            if isinstance(value, Field) and 'type' in value.metadata:
+                if '__annotations__' in dct:
+                    dct['__annotations__'][name] = value.metadata['type']
+                else:
+                    dct['__instance__'] = {name: value.metadata['type']}
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    @classmethod
-    async def create(cls, *args, **kwargs):
-        instance = cls(*args, **kwargs)
-        (properties, _) = cls._split_properties_and_relationships(kwargs)
-        await cls._database_connection.execute(f'{{cypher}} create (:{cls.__name__} {{{ cls._transform_properties_to_cypher(properties) }}});')
-        await cls._database_connection.execute('commit;')
+        instance = super().__new__(cls, name, bases, dct)
         return instance
 
-    @staticmethod
-    def _transform_properties_to_cypher(properties: dict[str, Any]):
+
+class BaseModel(metaclass=MetaModel):
+    _database_connection: DatabaseConnection
+
+    async def create(self):
+        (properties, _) = self._split_properties_and_relationships()
+        await self._database_connection.execute(f'{{cypher}} create (:{self.__class__.__qualname__} {{{ self._transform_properties_to_cypher(properties) }}});')
+        await self._database_connection.execute('commit;')
+        return self
+
+    async def save(self) -> None:
+        pass
+
+    def _transform_properties_to_cypher(self, properties: dict[str, Any]):
         return ",".join(f"{index}: {value!r}" for index, value in properties.items())
         
-    @classmethod
-    def _split_properties_and_relationships(cls, arguments: dict[str, Any]):
-        fields = dataclasses.fields(cls)
+    def _split_properties_and_relationships(self):
         properties = {}
         relationships = {}
-        for f in fields:
-            if hasattr(f.type, '__metadata__') and 'Relationship' in f.type.__metadata__:
-                relationships[f.name] = arguments[f.name]
+        for (field_name, field_value) in self.__dict__.items():
+            if 'akiradb.model.relations.Relation' in [t.__module__ + '.' + t.__name__ for t in type(field_value).__mro__]:
+                relationships[field_name] = field_value
             else:
-                properties[f.name] = arguments[f.name]
+                properties[field_name] = field_value
 
         return (properties, relationships)

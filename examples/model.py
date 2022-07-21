@@ -1,9 +1,10 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 
 from akiradb.database_connection import DatabaseConnection
 from akiradb.model.base_model import BaseModel
-from akiradb.typing.relationship import OneToManyRelationship, ManyToOneRelationship
+from akiradb.model.relations import relation, ManyWithProperties, Properties
 
 
 class Model(BaseModel):
@@ -11,70 +12,27 @@ class Model(BaseModel):
 
 
 @dataclass
+class SinceProperties(Properties):
+    since: str
+
+
+@dataclass
 class Person(Model):
     name: str
-    spouses: OneToManyRelationship["Person"]
-    spouses_invert: ManyToOneRelationship["Person"]
+
+    spouses = relation('married_to', ManyWithProperties["Person", SinceProperties], bidirectionnal=True)
 
 
 async def main():
     await Model._database_connection.connect()
 
-    person1 = await Person.create(name="Nana-chan", spouses=[None], spouses_invert=None)
-    await Person.create(name="Senpai-kun", spouses=[person1], spouses_invert=None)
+    nana_chan = await Person(name="Nana-chan").create()
+    senpai_kun = await Person(name="Senpai-kun").create()
+
+    nana_chan.spouses.add(senpai_kun, SinceProperties(since=str(datetime.now())))
+    await nana_chan.save()
 
     await Model._database_connection.close()
-
-
-# class Person2(Model):
-#     def __init__(self, name: str):
-#         self.name = name
-#
-#     spouses: OneToManyRelationship["Person2"]
-#     spouses_invert: ManyToOneRelationship["Person2"]
-#
-#
-# async def main2():
-#     await Model._database_connection.connect()
-#
-#     person1 = Person2(name="Nana-chan")
-#     await person1.save()
-#
-#     person2 = Person2(name="Senpai-kun")
-#     person2.spouses.add(person1)
-#     await person2.save()
-
-
-# from dataclasses import dataclass
-# from typing import ClassVar, Generic, TypeVar
-#
-# T = TypeVar('T')
-#
-#
-# def relation(cls):
-#     return ClassVar[cls]
-#
-#
-# class Relation(Generic[T]):
-#
-#     def add(self, element: T):
-#         pass
-#
-#
-# class Relation2(Relation['Person']):
-#     since: str
-#
-#
-# @dataclass
-# class Person:
-#     name: str
-#
-#     spouses = Relation['Person']()
-#
-#
-# test = Person("a")
-#
-# test.spouses.add(Person("b"))
 
 
 if __name__ == '__main__':

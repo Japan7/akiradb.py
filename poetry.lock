@@ -1,20 +1,41 @@
 [[package]]
-name = "asyncpg"
-version = "0.26.0"
-description = "An asyncio PostgreSQL driver"
+name = "psycopg"
+version = "3.0.15"
+description = "PostgreSQL database adapter for Python"
 category = "main"
 optional = false
-python-versions = ">=3.6.0"
+python-versions = ">=3.6"
+
+[package.dependencies]
+tzdata = {version = "*", markers = "sys_platform == \"win32\""}
 
 [package.extras]
-dev = ["Cython (>=0.29.24,<0.30.0)", "pytest (>=6.0)", "Sphinx (>=4.1.2,<4.2.0)", "sphinxcontrib-asyncio (>=0.3.0,<0.4.0)", "sphinx-rtd-theme (>=0.5.2,<0.6.0)", "pycodestyle (>=2.7.0,<2.8.0)", "flake8 (>=3.9.2,<3.10.0)", "uvloop (>=0.15.3)"]
-docs = ["Sphinx (>=4.1.2,<4.2.0)", "sphinxcontrib-asyncio (>=0.3.0,<0.4.0)", "sphinx-rtd-theme (>=0.5.2,<0.6.0)"]
-test = ["pycodestyle (>=2.7.0,<2.8.0)", "flake8 (>=3.9.2,<3.10.0)", "uvloop (>=0.15.3)"]
+binary = ["psycopg-binary (==3.0.15)"]
+c = ["psycopg-c (==3.0.15)"]
+dev = ["black (>=22.3.0)", "dnspython (>=2.1)", "flake8 (>=4.0)", "mypy (>=0.920,!=0.930,!=0.931)", "types-setuptools (>=57.4)", "wheel (>=0.37)"]
+docs = ["Sphinx (>=4.2)", "furo (==2021.11.23)", "sphinx-autobuild (>=2021.3.14)", "sphinx-autodoc-typehints (>=1.12)", "dnspython (>=2.1)", "shapely (>=1.7)"]
+pool = ["psycopg-pool"]
+test = ["mypy (>=0.920,!=0.930,!=0.931)", "pproxy (>=2.7)", "pytest (>=6.2.5)", "pytest-asyncio (>=0.16,<0.17)", "pytest-cov (>=3.0)", "pytest-randomly (>=3.10)"]
+
+[[package]]
+name = "tzdata"
+version = "2022.1"
+description = "Provider of IANA time zone data"
+category = "main"
+optional = false
+python-versions = ">=2"
 
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "4af11301da71046f887c845b16e0ff8f936f23d2751c03d7d24e3d363ad82db0"
+content-hash = "d1c00bac7feeb0f1132c6f29ab6ca77d9ffeb2d5257fd5f254b1639ae30d7b17"
 
 [metadata.files]
-asyncpg = []
+psycopg = [
+    {file = "psycopg-3.0.15-py3-none-any.whl", hash = "sha256:9e9beaf38ace6bdf5a5ad969130339d69d61e6ad41114d166779e591bfe40076"},
+    {file = "psycopg-3.0.15.tar.gz", hash = "sha256:1c5637f47e9a4d9b742a0b101f39189bebae0f625bfdfb0cf8a54dd5fe677610"},
+]
+tzdata = [
+    {file = "tzdata-2022.1-py2.py3-none-any.whl", hash = "sha256:238e70234214138ed7b4e8a0fab0e5e13872edab3be586ab8198c407620e2ab9"},
+    {file = "tzdata-2022.1.tar.gz", hash = "sha256:8b536a8ec63dc0751342b3984193a3118f8fca2afe25752bb9b7fffd398552d3"},
+]

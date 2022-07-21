@@ -21,6 +21,6 @@ jobs:
     - name: Install dependencies
       run: pip install --upgrade poetry wheel && poetry install
     - name: Check codestyle
-      run: flake8
+      run: poetry run flake8
     - name: Check typing
-      run: mypy --non-interactive --ignore-missing-imports src
+      run: poetry run mypy --non-interactive --ignore-missing-imports src

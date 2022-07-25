@@ -28,4 +28,4 @@ per-file-ignores =
     # comments should start with space
     example.local_settings.py: E265,
 
-exclude = .git,.venv,__pycache__
+exclude = .git,.venv,__pycache__,psycopg

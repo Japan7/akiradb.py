@@ -20,6 +20,7 @@ class DatabaseConnection():
         self._conn = await psycopg.AsyncConnection.connect(
             f"dbname={self.database} user={self.user} password={self.password} "
             f"host={self.hostname}", autocommit=True)
+        self._conn.prepare_threshold = None
 
     @contextlib.asynccontextmanager
     async def execute(self, command):
@@ -28,6 +29,22 @@ class DatabaseConnection():
 
         async with self._conn.cursor() as cur:
             await cur.execute(command)
+            yield cur
+
+    @contextlib.asynccontextmanager
+    async def pipeline(self):
+        if not self._conn:
+            raise AkiraNotConnectedException()
+
+        async with self._conn.pipeline() as pipeline:
+            yield pipeline
+
+    @contextlib.asynccontextmanager
+    async def cursor(self):
+        if not self._conn:
+            raise AkiraNotConnectedException()
+
+        async with self._conn.cursor() as cur:
             yield cur
 
     async def commit(self):

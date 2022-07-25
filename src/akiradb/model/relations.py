@@ -15,6 +15,7 @@ class Relation(Generic[TModel]):
         self._invert = invert
         self._bidirectionnal = bidirectionnal
         self._source: BaseModel | None = None
+        self._attribute_name: str
 
     async def _link(self, source: BaseModel, target: BaseModel,
                     properties: Union['Properties', None] = None):
@@ -36,7 +37,14 @@ class Many(Relation[TModel]):
         super().__init__(*args, **kwargs)
         self._elements: list[TModel] = []
 
-    def add(self, element: TModel):
+    def add(self, element: TModel, invert_operation=False):
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._link(self._source, element))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._link(element, self._source)
+                )
+                getattr(element, self._attribute_name).add(self._source, invert_operation=True)
         self._elements.append(element)
 
 
@@ -45,7 +53,14 @@ class One(Relation[TModel]):
         super().__init__(*args, **kwargs)
         self._element: TModel | None = None
 
-    def set(self, element: TModel):
+    def set(self, element: TModel, invert_operation=False):
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._link(self._source, element))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._link(element, self._source)
+                )
+                getattr(element, self._attribute_name).set(self._source, invert_operation=True)
         self._element = element
 
 
@@ -73,16 +88,16 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
 
     def add(self, element: TModel,  # type: ignore[override]
             properties: TProperties,
-            create_in_db=True):
-        if self._source:
+            invert_operation=False):
+        if self._source and not invert_operation:
             self._source._operations_queue.append(self._link(self._source, element, properties))
             if self._bidirectionnal:
                 self._source._operations_queue.append(
                     self._link(element, self._source, properties)
                 )
-                # TODO: manage bidirectionnal relations
-                # element.add(self._source, properties, create_in_db=False)
-        super().add(element)
+                getattr(element, self._attribute_name).add(self._source, properties,
+                                                           invert_operation=True)
+        self._elements.append(element)
         self._properties.append(properties)
 
 
@@ -91,8 +106,17 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
         One.__init__(self, *args, **kwargs)
         self._properties: TProperties | None = None
 
-    def set(self, element: TModel, properties: TProperties):  # type: ignore[override]
-        super().set(element)
+    def set(self, element: TModel, properties: TProperties,  # type: ignore[override]
+            invert_operation=False):
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._link(self._source, element, properties))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._link(element, self._source, properties)
+                )
+                getattr(element, self._attribute_name).set(self._source, properties,
+                                                           invert_operation=True)
+        self._element = element
         self._properties = properties
 
 

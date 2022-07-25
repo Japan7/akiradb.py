@@ -33,13 +33,34 @@ class BaseModel(metaclass=MetaModel):
     def __post_init__(self):
         self._rid: str
         self._operations_queue: list[Coroutine] = []
+        self._properties, self._relations = self._split_properties_and_relations()
+        for relation_name, relation_value in self._relations.items():
+            relation_value._source = self
+            relation_value._attribute_name = relation_name
+
+    @classmethod
+    async def bulk_create(cls, nodes: list['BaseModel']):
+        async with cls._database_connection.pipeline() as pipeline:
+            async with cls._database_connection.cursor() as cursor:
+                for node in nodes:
+                    await cursor.execute(node._get_create_request())
+
+                await cls._database_connection.commit()
+
+                await pipeline.sync()
+                i = 0
+                async for row in cursor:
+                    assert row is not None
+                    nodes[i]._rid, = row
+                    i += 1
+
+    def _get_create_request(self) -> str:
+        return (f"{{cypher}} create (n:{self.__class__.__qualname__} "
+                f"{{{ self._transform_properties_to_cypher(self._properties) }}}) "
+                f"return id(n);")
 
     async def create(self):
-        properties, relationships = self._split_properties_and_relationships()
-
-        req = (f"{{cypher}} create (n:{self.__class__.__qualname__} "
-               f"{{{ self._transform_properties_to_cypher(properties) }}}) "
-               f"return id(n);")
+        req = self._get_create_request()
 
         async with self._database_connection.execute(req) as cursor:
             await self._database_connection.commit()
@@ -47,31 +68,29 @@ class BaseModel(metaclass=MetaModel):
             assert row is not None
             self._rid, = row
 
-        for relationship in relationships.values():
-            relationship._source = self
-
         return self
 
     async def save(self) -> None:
-        await asyncio.gather(*self._operations_queue)
-        await self._database_connection.commit()
-        self._operations_queue = []
+        if self._operations_queue:
+            await asyncio.gather(*self._operations_queue)
+            await self._database_connection.commit()
+            self._operations_queue = []
 
     def _transform_properties_to_cypher(self, properties: dict[str, Any]):
         return ",".join(f"{index}: {value!r}"
                         for index, value in properties.items())
 
-    def _split_properties_and_relationships(self):
+    def _split_properties_and_relations(self):
         properties: dict[str, Any] = {}
-        relationships: dict[str, 'Relation[BaseModel]'] = {}
+        relations: dict[str, 'Relation[BaseModel]'] = {}
 
         for field in fields(self):
             field_value = getattr(self, field.name)
             mros = (f"{t.__module__}.{t.__name__}"
                     for t in type(field_value).__mro__)
             if 'akiradb.model.relations.Relation' in mros:
-                relationships[field.name] = field_value
+                relations[field.name] = field_value
             else:
                 properties[field.name] = field_value
 
-        return properties, relationships
+        return properties, relations

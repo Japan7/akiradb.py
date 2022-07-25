@@ -7,7 +7,9 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-psycopg = "^3.0.15"
+psycopg = { path = "./psycopg/psycopg" }
+psycopg_c = { path = "./psycopg/psycopg_c" }
+psycopg_pool = { path = "./psycopg/psycopg_pool" }
 
 [tool.poetry.dev-dependencies]
 flake8 = "^4.0.1"

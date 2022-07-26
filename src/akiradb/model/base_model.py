@@ -49,10 +49,14 @@ class BaseModel(metaclass=MetaModel):
 
                 await pipeline.sync()
                 i = 0
-                async for row in cursor:
+                while True:
+                    row = await cursor.fetchone()
                     assert row is not None
-                    nodes[i]._rid, = row
+                    nodes[i]._rid = row
+                    if not cursor.nextset():
+                        break
                     i += 1
+                print(i+1)
 
     def _get_create_request(self) -> str:
         return (f"{{cypher}} create (n:{self.__class__.__qualname__} "

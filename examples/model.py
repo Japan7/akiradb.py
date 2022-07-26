@@ -51,22 +51,22 @@ async def main():
     await Person.bulk_create(nana_chans)
     await Person.bulk_create(senpai_kuns)
 
-    nana_chan = await Person(name="Nana-chan").create()
-    senpai_kun = await Person(name="Senpai-kun").create()
+    # nana_chan = await Person(name="Nana-chan").create()
+    # senpai_kun = await Person(name="Senpai-kun").create()
 
-    nana_chan.spouses.add(senpai_kun, SinceProperties(since=str(datetime.now())))
-    await nana_chan.save()
+    # nana_chan.spouses.add(senpai_kun, SinceProperties(since=str(datetime.now())))
+    # await nana_chan.save()
 
-    player1 = await Player().create()
-    player2 = await Player().create()
+    # player1 = await Player().create()
+    # player2 = await Player().create()
 
-    gold = await Item(name="gold", description="Pieces of gold").create()
+    # gold = await Item(name="gold", description="Pieces of gold").create()
 
-    player1.items.add(gold, Quantity(number=100))
-    player2.items.add(gold, Quantity(number=200))
+    # player1.items.add(gold, Quantity(number=100))
+    # player2.items.add(gold, Quantity(number=200))
 
-    await player1.save()
-    await player2.save()
+    # await player1.save()
+    # await player2.save()
 
     await Model._database_connection.close()
 

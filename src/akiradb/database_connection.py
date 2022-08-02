@@ -2,7 +2,7 @@ import contextlib
 
 import psycopg
 
-from .exceptions.not_connected_exception import AkiraNotConnectedException
+from akiradb.exceptions import AkiraNotConnectedException
 
 
 class DatabaseConnection():
@@ -40,11 +40,11 @@ class DatabaseConnection():
             yield pipeline
 
     @contextlib.asynccontextmanager
-    async def cursor(self):
+    async def cursor(self, **kwargs):
         if not self._conn:
             raise AkiraNotConnectedException()
 
-        async with self._conn.cursor() as cur:
+        async with self._conn.cursor(**kwargs) as cur:
             yield cur
 
     async def commit(self):

@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 
 from akiradb.database_connection import DatabaseConnection
-from akiradb.model.base_model import BaseModel
+from akiradb.model.base_model import BaseModel, anything
 from akiradb.model.relations import ManyWithProperties, Properties, relation
 
 database_connection = DatabaseConnection(username='root',
@@ -20,6 +20,7 @@ class SinceProperties(Properties):
 
 class Person(Model):
     name: str
+    married: bool
 
     spouses = relation('married_to',
                        ManyWithProperties["Person", SinceProperties],
@@ -45,14 +46,14 @@ async def main():
     nana_chans = []
     senpai_kuns = []
     for _ in range(1000):
-        nana_chans.append(Person(name="Nana-chan"))
-        senpai_kuns.append(Person(name="Senpai-kun"))
+        nana_chans.append(Person(name="Nana-chan", married=False))
+        senpai_kuns.append(Person(name="Senpai-kun", married=False))
 
     await Person.bulk_create(nana_chans)
     await Person.bulk_create(senpai_kuns)
 
-    nana_chan = await Person(name="Nana-chan").create()
-    senpai_kun = await Person(name="Senpai-kun").create()
+    nana_chan = await Person(name="Nana-chan", married=True).create()
+    senpai_kun = await Person(name="Senpai-kun", married=True).create()
 
     nana_chan.spouses.add(senpai_kun, SinceProperties(since=str(datetime.now())))
     await nana_chan.save()
@@ -67,6 +68,17 @@ async def main():
 
     await player1.save()
     await player2.save()
+
+    await nana_chan.load()
+
+    # TODO: nana_chans2 = await Person.fetch_many(Person.name == 'Nana-chan')
+    nana_chans_2 = await Person.fetch_many(name='Nana-chan', married=anything)
+    print(len(nana_chans_2))
+    print(len(await Person.fetch_all()))
+
+    married_nana_chans = await Person.fetch_many(name='Nana-chan', married=True)
+    for married_nana_chan in married_nana_chans:
+        print(await married_nana_chan.spouses.get())
 
     await Model._database_connection.close()
 

@@ -20,11 +20,15 @@ class SinceProperties(Properties):
 
 class Person(Model):
     name: str
-    married: bool
+    married: bool = False
 
     spouses = relation('married_to',
                        ManyWithProperties["Person", SinceProperties],
                        bidirectionnal=True)
+
+
+class BetterPerson(Person):
+    better_name: str = "Hello World"
 
 
 class Quantity(Properties):
@@ -46,7 +50,7 @@ async def main():
     nana_chans = []
     senpai_kuns = []
     for _ in range(1000):
-        nana_chans.append(Person(name="Nana-chan", married=False))
+        nana_chans.append(BetterPerson(name="Nana-chan"))
         senpai_kuns.append(Person(name="Senpai-kun", married=False))
 
     await Person.bulk_create(nana_chans)

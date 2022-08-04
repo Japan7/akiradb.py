@@ -33,8 +33,9 @@ class Relation(Generic[TModel]):
 
     def _get_target_match_request(self, target_cls, properties_cls=None):
         assert self._source
-        target_cls_properties = ['n2.' + property_name
-                                 for property_name in target_cls._properties_names] + ['id(n2)']
+        target_cls_properties = ['id(n2)', 'labels(n2)'] + \
+                                ['n2.' + property_name
+                                 for property_name in target_cls._properties_names]
         if properties_cls:
             target_cls_properties += ['r.' + property.name for property in fields(properties_cls)]
 
@@ -76,8 +77,8 @@ class Many(Relation[TModel]):
                 await cursor.execute(req)
                 async for row in cursor:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.')}
-                    instance = target_cls(**parameters)  # type: ignore
+                                  if name.startswith('n2.') and value is not None}
+                    instance = MetaModel._models[row['labels(n2)']](**parameters)
                     instance._rid = row['id(n2)']
                     self._elements.append(instance)
 
@@ -114,8 +115,8 @@ class One(Relation[TModel]):
                 row = await cursor.fetchone()
                 if row:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.')}
-                    instance = target_cls(**parameters)  # type: ignore
+                                  if name.startswith('n2.') and value is not None}
+                    instance = MetaModel._models[row['labels(n2)']](**parameters)
                     instance._rid = row['id(n2)']
                     self._element = instance
 
@@ -181,8 +182,8 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
                 await cursor.execute(req)
                 async for row in cursor:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.')}
-                    instance = target_cls(**parameters)  # type: ignore
+                                  if name.startswith('n2.') and value is not None}
+                    instance = MetaModel._models[row['labels(n2)']](**parameters)
                     instance._rid = row['id(n2)']
                     properties_parameters = {name[2:]: value for (name, value) in row.items()
                                              if name.startswith('r.')}
@@ -233,10 +234,10 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
                 if row:
                     parameters = {name[3:]: value for (name, value) in row.items()
                                   if name.startswith('n2.')}
-                    instance = target_cls(**parameters)  # type: ignore
+                    instance = MetaModel._models[row['labels(n2)']](**parameters)
                     instance._rid = row['id(n2)']
                     properties_parameters = {name[2:]: value for (name, value) in row.items()
-                                             if name.startswith('r.')}
+                                             if name.startswith('r.') and value is not None}
                     properties_instance = properties_cls(**properties_parameters)  # type: ignore
                     self._element = instance
                     self._properties = properties_instance

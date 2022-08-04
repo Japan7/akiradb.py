@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import Field, fields, dataclass
+from dataclasses import MISSING, Field, fields, dataclass
 from typing import (
     TYPE_CHECKING, Any, Callable, ClassVar, Coroutine, ParamSpec, Type, TypeVar, cast
 )
@@ -7,8 +7,10 @@ from typing import (
 from psycopg.rows import dict_row
 
 from akiradb.database_connection import DatabaseConnection
-from akiradb.exceptions import AkiraNodeNotFoundException, AkiraUnknownNodeException
-from akiradb.model.utils import __dataclass_transform__
+from akiradb.exceptions import (
+    AkiraNodeNotFoundException, AkiraNodeTypeAlreadyDefinedException, AkiraUnknownNodeException
+)
+from akiradb.model.utils import __dataclass_transform__, _get_cypher_property_type
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation
@@ -26,14 +28,22 @@ class MetaModel(type):
         if '__annotations__' not in dct:
             dct['__annotations__'] = {}
 
+        instance = cast(Type, super().__new__(cls, name, bases, dct))
+
+        rec_dct = dct.copy()
+        for base in bases:
+            for field in fields(base):
+                rec_dct[field.name] = field
+                if 'type' in field.metadata:
+                    setattr(instance, field.name, field)
+
         properties_names = []
         relations_names = []
-        for key, value in dct.items():
+        for key, value in rec_dct.items():
             if isinstance(value, Field) and 'type' in value.metadata:
                 dct['__annotations__'][key] = value.metadata['type']
                 relations_names.append(key)
 
-        instance = cast(Type, super().__new__(cls, name, bases, dct))
         if database_connection is not None:
             instance._database_connection = database_connection
 
@@ -45,8 +55,13 @@ class MetaModel(type):
         dataclass_instance._relations_names = relations_names
         # TODO: Simplify instance split from class split
 
-        # TODO: Exception if name already exists
+        if name in MetaModel._models:
+            raise AkiraNodeTypeAlreadyDefinedException(name)
         MetaModel._models[name] = dataclass_instance
+
+        if hasattr(dataclass_instance, '_database_connection'):
+            asyncio.run(dataclass_instance._create_type_and_properties())
+
         return dataclass_instance
 
 
@@ -55,6 +70,8 @@ P = ParamSpec('P')
 
 
 class BaseModel(metaclass=MetaModel):
+    _properties_names: ClassVar[list[str]]
+    _relations_names: ClassVar[list[str]]
     _database_connection: ClassVar[DatabaseConnection]
 
     def __post_init__(self):
@@ -64,6 +81,25 @@ class BaseModel(metaclass=MetaModel):
         for relation_name, relation_value in self._relations.items():
             relation_value._source = self
             relation_value._attribute_name = relation_name
+
+    @classmethod
+    async def _create_type_and_properties(cls):
+        await cls._database_connection.connect()
+        supertypes = [type.__qualname__ for type in cls.__bases__ if type is not BaseModel]
+        async with cls._database_connection.cursor() as cursor:
+            req = (f'create vertex type {cls.__qualname__} if not exists '
+                   f'{"extends " + ",".join(supertypes) if supertypes else ""};')
+            await cursor.execute(req)
+            for field in fields(cls):
+                if field.name in cls._properties_names and field.name in cls.__annotations__:
+                    req = (f'create property {cls.__qualname__}.{field.name} if not exists '
+                           f'{_get_cypher_property_type(field.type)};')
+                    await cursor.execute(req)
+                    if field.default is not MISSING:
+                        req = (f'alter property {cls.__qualname__}.{field.name} '
+                               f'default {field.default!r};')
+                        await cursor.execute(req)
+        await cls._database_connection.close()
 
     @classmethod
     async def bulk_create(cls: Type[TModel], nodes: list[TModel]):
@@ -113,8 +149,8 @@ class BaseModel(metaclass=MetaModel):
                 raise AkiraNodeNotFoundException()
 
             parameters = {name: value for (name, value) in row.items()
-                          if not name.startswith('@')}
-            instance = cls(**parameters)  # type: ignore
+                          if not name.startswith('@') and value is not None}
+            instance = MetaModel._models[row['@type']](**parameters)
             instance._rid = row['@rid']
 
         return instance
@@ -129,8 +165,8 @@ class BaseModel(metaclass=MetaModel):
             await cursor.execute(req)
             async for row in cursor:
                 parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@')}
-                instance = cls(**parameters)  # type: ignore
+                              if not name.startswith('@') and value is not None}
+                instance = MetaModel._models[row['@type']](**parameters)
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -145,8 +181,8 @@ class BaseModel(metaclass=MetaModel):
             await cursor.execute(req)
             async for row in cursor:
                 parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@')}
-                instance = cls(**parameters)  # type: ignore
+                              if not name.startswith('@') and value is not None}
+                instance = MetaModel._models[row['@type']](**parameters)
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -188,9 +224,7 @@ class BaseModel(metaclass=MetaModel):
 
         for field in fields(self):
             field_value = getattr(self, field.name)
-            mros = (f"{t.__module__}.{t.__name__}"
-                    for t in type(field_value).__mro__)
-            if 'akiradb.model.relations.Relation' in mros:
+            if field.name in self.__class__._relations_names:
                 relations[field.name] = field_value
             else:
                 properties[field.name] = field_value

@@ -13,3 +13,16 @@ def __dataclass_transform__(
     # If used within a stub file, the following implementation can be
     # replaced with "...".
     return lambda a: a
+
+
+def _get_cypher_property_type(field_type):
+    if field_type is int:
+        return 'integer'
+    elif field_type is bool:
+        return 'boolean'
+    elif field_type is float:
+        return 'double'
+    elif field_type is bytes:
+        return 'byte'
+    else:
+        return 'string'

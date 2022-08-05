@@ -47,7 +47,7 @@ class MetaModel(type):
         if database_connection is not None:
             instance._database_connection = database_connection
 
-        dataclass_instance = dataclass(instance)
+        dataclass_instance = cast(Type['BaseModel'], dataclass(instance))
         for field in fields(dataclass_instance):
             if field.name not in relations_names:
                 properties_names.append(field.name)
@@ -88,7 +88,7 @@ class BaseModel(metaclass=MetaModel):
         supertypes = [type.__qualname__ for type in cls.__bases__ if type is not BaseModel]
         async with cls._database_connection.cursor() as cursor:
             req = (f'create vertex type {cls.__qualname__} if not exists '
-                   f'{"extends " + ",".join(supertypes) if supertypes else ""};')
+                   f'{("extends " + ",".join(supertypes)) if supertypes else ""};')
             await cursor.execute(req)
             for field in fields(cls):
                 if field.name in cls._properties_names and field.name in cls.__annotations__:
@@ -113,15 +113,16 @@ class BaseModel(metaclass=MetaModel):
             await cls._database_connection.commit()
 
     def _get_create_request(self) -> str:
-        return (f"{{cypher}} create (n:{self.__class__.__qualname__} "
-                f"{{{ self._transform_properties_to_cypher(self._properties) }}}) "
-                f"return id(n);")
+        return (f'{{cypher}} create (n:{self.__class__.__qualname__} '
+                f'{{{ self._transform_properties_to_cypher(self._properties) }}}) '
+                f'return id(n);')
 
     @classmethod
-    def _get_fetch_request(cls, **kwargs) -> str:
-        return (f"{{cypher}} match (n:{cls.__qualname__} "
-                f"{{{ cls._transform_properties_to_cypher(kwargs) }}}) "
-                f"return n;")
+    def _get_fetch_request(cls, rid = None, **kwargs) -> str:
+        return (f'{{cypher}} match (n:{cls.__qualname__} '
+                f'{{{ cls._transform_properties_to_cypher(kwargs) }}}) '
+                f'{("where id(n) = " + repr(rid)) if rid is not None else ""}'
+                f'return n;')
 
     async def create(self):
         req = self._get_create_request()
@@ -135,10 +136,11 @@ class BaseModel(metaclass=MetaModel):
         return self
 
     @classmethod
-    async def fetch_one(cls: Callable[P, TModel],  # type: ignore[supertype]
+    async def fetch_one(cls_call: Callable[P, TModel],  # type: ignore[supertype,misc]
                         rid: str | None = None, *_: P.args, **kwargs: P.kwargs) -> TModel:
+        cls = cast(Type[TModel], cls_call)
         if rid:
-            req = cls._get_fetch_request({'@rid': rid})
+            req = cls._get_fetch_request(rid)
         else:
             req = cls._get_fetch_request(**kwargs)
 
@@ -156,8 +158,9 @@ class BaseModel(metaclass=MetaModel):
         return instance
 
     @classmethod
-    async def fetch_many(cls: Callable[P, TModel],  # type: ignore[supertype]
+    async def fetch_many(cls_call: Callable[P, TModel],  # type: ignore[supertype,misc]
                          *_: P.args, **kwargs: P.kwargs) -> list[TModel]:
+        cls = cast(Type[TModel], cls_call)
         req = cls._get_fetch_request(**kwargs)
 
         instances = []

@@ -162,7 +162,7 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
         self._elements.append(element)
         self._properties.append(properties)
 
-    async def get(self) -> list[tuple[TModel, TProperties]]:
+    async def get(self) -> list[tuple[TModel, TProperties]]:  # type: ignore[override]
         if not self._loaded:
             ref = self.__orig_class__.__args__[0]  # type: ignore[attr-defined]
             if isinstance(ref, ForwardRef):
@@ -212,7 +212,7 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
         self._element = element
         self._properties = properties
 
-    async def get(self) -> tuple[TModel | None, TProperties | None]:
+    async def get(self) -> tuple[TModel | None, TProperties | None]:  # type: ignore[override]
         if not self._loaded:
             ref = self.__orig_class__.__args__[0]  # type: ignore[attr-defined]
             if isinstance(ref, ForwardRef):

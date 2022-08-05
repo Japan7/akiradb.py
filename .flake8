@@ -17,6 +17,8 @@ ignore =
     E741,
     # do not perform function calls in default arguments
     B008,
+    # boolean comparions should use is
+    E712,
 
 per-file-ignores =
     __init__.py:

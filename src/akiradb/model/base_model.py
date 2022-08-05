@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import MISSING, Field, fields, dataclass
 from typing import (
-    TYPE_CHECKING, Any, Callable, ClassVar, Coroutine, ParamSpec, Type, TypeVar, cast
+    TYPE_CHECKING, Any, ClassVar, Coroutine, ParamSpec, Type, TypeVar, cast
 )
 
 from psycopg.rows import dict_row
@@ -10,13 +10,11 @@ from akiradb.database_connection import DatabaseConnection
 from akiradb.exceptions import (
     AkiraNodeNotFoundException, AkiraNodeTypeAlreadyDefinedException, AkiraUnknownNodeException
 )
+from akiradb.model.conditions import Condition, PropertyCondition
 from akiradb.model.utils import __dataclass_transform__, _get_cypher_property_type
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation
-
-
-anything: Any = None
 
 
 @__dataclass_transform__()
@@ -53,7 +51,6 @@ class MetaModel(type):
                 properties_names.append(field.name)
         dataclass_instance._properties_names = properties_names
         dataclass_instance._relations_names = relations_names
-        # TODO: Simplify instance split from class split
 
         if name in MetaModel._models:
             raise AkiraNodeTypeAlreadyDefinedException(name)
@@ -63,6 +60,15 @@ class MetaModel(type):
             asyncio.run(dataclass_instance._create_type_and_properties())
 
         return dataclass_instance
+
+    def __getattribute__(self, name: str) -> Any:
+        try:
+            properties_names = super().__getattribute__('_properties_names')
+            if name in properties_names:
+                return PropertyCondition(name)
+        except AttributeError:
+            pass
+        return super().__getattribute__(name)
 
 
 TModel = TypeVar('TModel', bound='BaseModel')
@@ -118,10 +124,11 @@ class BaseModel(metaclass=MetaModel):
                 f'return id(n);')
 
     @classmethod
-    def _get_fetch_request(cls, rid = None, **kwargs) -> str:
-        return (f'{{cypher}} match (n:{cls.__qualname__} '
-                f'{{{ cls._transform_properties_to_cypher(kwargs) }}}) '
-                f'{("where id(n) = " + repr(rid)) if rid is not None else ""}'
+    def _get_fetch_request(cls, rid: str | None = None,
+                           condition: Condition | bool | None = None) -> str:
+        return (f'{{cypher}} match (n:{cls.__qualname__}) '
+                f'{("where " + str(condition)) if condition is not None else ""} '
+                f'{("where id(n) = " + repr(rid)) if rid is not None else ""} '
                 f'return n;')
 
     async def create(self):
@@ -136,13 +143,14 @@ class BaseModel(metaclass=MetaModel):
         return self
 
     @classmethod
-    async def fetch_one(cls_call: Callable[P, TModel],  # type: ignore[supertype,misc]
-                        rid: str | None = None, *_: P.args, **kwargs: P.kwargs) -> TModel:
-        cls = cast(Type[TModel], cls_call)
+    async def fetch_one(cls: Type[TModel],
+                        condition: Condition | bool | None, rid: str | None = None) -> TModel:
         if rid:
-            req = cls._get_fetch_request(rid)
+            req = cls._get_fetch_request(rid=rid)
+        elif condition:
+            req = cls._get_fetch_request(condition=condition)
         else:
-            req = cls._get_fetch_request(**kwargs)
+            req = cls._get_fetch_request()
 
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
             await cursor.execute(req)
@@ -158,10 +166,8 @@ class BaseModel(metaclass=MetaModel):
         return instance
 
     @classmethod
-    async def fetch_many(cls_call: Callable[P, TModel],  # type: ignore[supertype,misc]
-                         *_: P.args, **kwargs: P.kwargs) -> list[TModel]:
-        cls = cast(Type[TModel], cls_call)
-        req = cls._get_fetch_request(**kwargs)
+    async def fetch_many(cls: Type[TModel], condition: Condition | bool) -> list[TModel]:
+        req = cls._get_fetch_request(condition=condition)
 
         instances = []
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
@@ -177,7 +183,7 @@ class BaseModel(metaclass=MetaModel):
 
     @classmethod
     async def fetch_all(cls: Type[TModel]) -> list[TModel]:
-        req = f"{{cypher}} match (n:{cls.__qualname__}) return n;"
+        req = cls._get_fetch_request()
 
         instances = []
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:

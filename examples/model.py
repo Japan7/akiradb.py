@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 
 from akiradb.database_connection import DatabaseConnection
-from akiradb.model.base_model import BaseModel, anything
+from akiradb.model.base_model import BaseModel
 from akiradb.model.relations import ManyWithProperties, Properties, relation
 
 database_connection = DatabaseConnection(username='root',
@@ -76,11 +76,12 @@ async def main():
     await nana_chan.load()
 
     # TODO: nana_chans2 = await Person.fetch_many(Person.name == 'Nana-chan')
-    nana_chans_2 = await Person.fetch_many(name='Nana-chan', married=anything)
+    nana_chans_2 = await Person.fetch_many(Person.name == 'Nana-chan')
     print(len(nana_chans_2))
     print(len(await Person.fetch_all()))
 
-    married_nana_chans = await Person.fetch_many(name='Nana-chan', married=True)
+    married_nana_chans = await Person.fetch_many((Person.name == 'Nana-chan')
+                                                 & (Person.married == True))
     for married_nana_chan in married_nana_chans:
         print(await married_nana_chan.spouses.get())
 

@@ -50,6 +50,8 @@ class MetaModel(type):
         for field in fields(dataclass_instance):
             if field.name not in relations_names:
                 properties_names.append(field.name)
+                setattr(dataclass_instance, field.name,
+                        PropertyChangesRecorderDescriptor(field.name))
         dataclass_instance._properties_names = properties_names
         dataclass_instance._relations_names = relations_names
 
@@ -59,11 +61,6 @@ class MetaModel(type):
 
         if hasattr(dataclass_instance, '_database_connection'):
             asyncio.run(dataclass_instance._create_type_and_properties())
-
-        for property_name in properties_names:
-            setattr(dataclass_instance, property_name, PropertyChangesRecorderDescriptor(
-                property_name, getattr(dataclass_instance, property_name))
-            )
 
         return dataclass_instance
 
@@ -86,12 +83,18 @@ class BaseModel(metaclass=MetaModel):
     _relations_names: ClassVar[list[str]]
     _database_connection: ClassVar[DatabaseConnection]
 
+    def __new__(cls, **_):
+        instance = super().__new__(cls)
+        instance._properties_recorders = {}
+        return instance
+
     def __post_init__(self):
         self._rid: str
         self._operations_queue: list[Coroutine] = []
         self._properties, self._relations = self._split_properties_and_relations()
-        for property_name, property_value in self._properties.items():
-            self.__dict__[property_name] = PropertyChangesRecorder(property_value)
+        self._properties_recorders: dict[str, PropertyChangesRecorder]
+        for property_name, _ in self._properties.items():
+            self._properties_recorders[property_name].clear_changes()
         for relation_name, relation_value in self._relations.items():
             relation_value._source = self
             relation_value._attribute_name = relation_name

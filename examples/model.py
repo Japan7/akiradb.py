@@ -75,7 +75,6 @@ async def main():
 
     await nana_chan.load()
 
-    # TODO: nana_chans2 = await Person.fetch_many(Person.name == 'Nana-chan')
     nana_chans_2 = await Person.fetch_many(Person.name == 'Nana-chan')
     print(len(nana_chans_2))
     print(len(await Person.fetch_all()))
@@ -83,6 +82,7 @@ async def main():
     married_nana_chans = await Person.fetch_many((Person.name == 'Nana-chan')
                                                  & (Person.married == True))
     for married_nana_chan in married_nana_chans:
+        married_nana_chan.name += '-senpai'
         print(await married_nana_chan.spouses.get())
 
     await Model._database_connection.close()

@@ -11,6 +11,7 @@ from akiradb.exceptions import (
     AkiraNodeNotFoundException, AkiraNodeTypeAlreadyDefinedException, AkiraUnknownNodeException
 )
 from akiradb.model.conditions import Condition, PropertyCondition
+from akiradb.model.proxies import PropertyChangesRecorder, PropertyChangesRecorderDescriptor
 from akiradb.model.utils import __dataclass_transform__, _get_cypher_property_type
 
 if TYPE_CHECKING:
@@ -59,6 +60,11 @@ class MetaModel(type):
         if hasattr(dataclass_instance, '_database_connection'):
             asyncio.run(dataclass_instance._create_type_and_properties())
 
+        for property_name in properties_names:
+            setattr(dataclass_instance, property_name, PropertyChangesRecorderDescriptor(
+                property_name, getattr(dataclass_instance, property_name))
+            )
+
         return dataclass_instance
 
     def __getattribute__(self, name: str) -> Any:
@@ -84,6 +90,8 @@ class BaseModel(metaclass=MetaModel):
         self._rid: str
         self._operations_queue: list[Coroutine] = []
         self._properties, self._relations = self._split_properties_and_relations()
+        for property_name, property_value in self._properties.items():
+            self.__dict__[property_name] = PropertyChangesRecorder(property_value)
         for relation_name, relation_value in self._relations.items():
             relation_value._source = self
             relation_value._attribute_name = relation_name

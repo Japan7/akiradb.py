@@ -1,5 +1,7 @@
 from typing import Any
 
+from akiradb.model.utils import _get_cypher_value
+
 
 class Condition:
     def __invert__(self) -> 'Not':
@@ -46,7 +48,7 @@ class ValueCondition(Condition):
         self.value = value
 
     def __str__(self):
-        return repr(self.value)
+        return _get_cypher_value(self.value)
 
 
 class Not(Condition):

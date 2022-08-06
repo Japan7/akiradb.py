@@ -1,3 +1,4 @@
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field, fields
 from functools import partial
 from typing import ForwardRef, Generic, Type, TypeVar, Union, cast
@@ -5,7 +6,7 @@ from typing import ForwardRef, Generic, Type, TypeVar, Union, cast
 from psycopg.rows import dict_row
 
 from akiradb.model.base_model import BaseModel, MetaModel
-from akiradb.model.utils import __dataclass_transform__
+from akiradb.model.utils import __dataclass_transform__, _get_cypher_value
 
 TModel = TypeVar('TModel', bound=BaseModel)
 
@@ -27,6 +28,14 @@ class Relation(Generic[TModel]):
                f"create (s)-[:{self._name} {{"
                f"{properties._to_cypher() if properties else ''}"
                f"}}]->(t);")
+
+        async with source._database_connection.execute(req):
+            pass
+
+    async def _unlink(self, source: BaseModel, target: BaseModel):
+        req = (f"{{cypher}} match (s)-[r:{self._name}]->(t) "
+               f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
+               f"delete r;")
 
         async with source._database_connection.execute(req):
             pass
@@ -62,6 +71,17 @@ class Many(Relation[TModel]):
                 )
                 getattr(element, self._attribute_name).add(self._source, invert_operation=True)
         self._elements.append(element)
+
+    def remove(self, element: TModel, invert_operation=False):
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._unlink(self._source, element))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._unlink(element, self._source)
+                )
+                getattr(element, self._attribute_name).remove(self._source, invert_operation=True)
+        with suppress(ValueError):
+            self._elements.remove(element)
 
     async def get(self) -> list[TModel]:
         if not self._loaded:
@@ -100,6 +120,16 @@ class One(Relation[TModel]):
                 getattr(element, self._attribute_name).set(self._source, invert_operation=True)
         self._element = element
 
+    def unset(self, element: TModel, invert_operation=False):
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._unlink(self._source, element))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._unlink(element, self._source)
+                )
+                getattr(element, self._attribute_name).unset(self._source, invert_operation=True)
+        self._element = None
+
     async def get(self) -> TModel | None:
         if not self._loaded:
             ref = self.__orig_class__.__args__[0]  # type: ignore[attr-defined]
@@ -136,7 +166,7 @@ class MetaProperties(type):
 
 class Properties(metaclass=MetaProperties):
     def _to_cypher(self):
-        return ",".join(f"{index}: {value!r}"
+        return ",".join(f"{index}: {_get_cypher_value(value)}"
                         for index, value in asdict(self).items())
 
 
@@ -161,6 +191,21 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
                                                            invert_operation=True)
         self._elements.append(element)
         self._properties.append(properties)
+
+    def remove(self, element: TModel,  # type: ignore[override]
+               invert_operation=False):
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._unlink(self._source, element))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._unlink(element, self._source)
+                )
+                getattr(element, self._attribute_name).remove(self._source, invert_operation=True)
+
+        with suppress(ValueError):
+            index = self._elements.index(element)
+            del self._elements[index]
+            del self._properties[index]
 
     async def get(self) -> list[tuple[TModel, TProperties]]:  # type: ignore[override]
         if not self._loaded:
@@ -211,6 +256,18 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
                                                            invert_operation=True)
         self._element = element
         self._properties = properties
+
+    def unset(self, element: TModel, invert_operation=False):  # type: ignore[override]
+        if self._source and not invert_operation:
+            self._source._operations_queue.append(self._unlink(self._source, element))
+            if self._bidirectionnal:
+                self._source._operations_queue.append(
+                    self._unlink(element, self._source)
+                )
+                getattr(element, self._attribute_name).unset(self._source, invert_operation=True)
+
+        self._element = None
+        self._properties = None
 
     async def get(self) -> tuple[TModel | None, TProperties | None]:  # type: ignore[override]
         if not self._loaded:

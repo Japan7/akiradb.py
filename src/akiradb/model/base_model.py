@@ -12,7 +12,9 @@ from akiradb.exceptions import (
 )
 from akiradb.model.conditions import Condition, PropertyCondition
 from akiradb.model.proxies import PropertyChangesRecorder, PropertyChangesRecorderDescriptor
-from akiradb.model.utils import __dataclass_transform__, _get_cypher_property_type
+from akiradb.model.utils import (
+    __dataclass_transform__, _get_cypher_property_type, _get_cypher_value
+)
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation
@@ -85,16 +87,16 @@ class BaseModel(metaclass=MetaModel):
 
     def __new__(cls, **_):
         instance = super().__new__(cls)
-        instance._properties_recorders = {}
+        instance.property_recorders = {}
         return instance
 
     def __post_init__(self):
         self._rid: str
         self._operations_queue: list[Coroutine] = []
         self._properties, self._relations = self._split_properties_and_relations()
-        self._properties_recorders: dict[str, PropertyChangesRecorder]
+        self.property_recorders: dict[str, PropertyChangesRecorder]
         for property_name, _ in self._properties.items():
-            self._properties_recorders[property_name].clear_changes()
+            self.property_recorders[property_name].clear_changes()
         for relation_name, relation_value in self._relations.items():
             relation_value._source = self
             relation_value._attribute_name = relation_name
@@ -114,7 +116,7 @@ class BaseModel(metaclass=MetaModel):
                     await cursor.execute(req)
                     if field.default is not MISSING:
                         req = (f'alter property {cls.__qualname__}.{field.name} '
-                               f'default {field.default!r};')
+                               f'default {_get_cypher_value(field.default)};')
                         await cursor.execute(req)
         await cls._database_connection.close()
 
@@ -129,10 +131,21 @@ class BaseModel(metaclass=MetaModel):
 
             await cls._database_connection.commit()
 
+    @classmethod
+    async def bulk_delete(cls: Type[TModel], nodes: list[TModel]):
+        async with cls._database_connection.cursor() as cursor:
+            for node in nodes:
+                await cursor.execute(node._get_delete_request())
+            await cls._database_connection.commit()
+
     def _get_create_request(self) -> str:
         return (f'{{cypher}} create (n:{self.__class__.__qualname__} '
                 f'{{{ self._transform_properties_to_cypher(self._properties) }}}) '
                 f'return id(n);')
+
+    def _get_delete_request(self) -> str:
+        return (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
+                f'where id(n) = {self._rid!r} detach delete n;')
 
     @classmethod
     def _get_fetch_request(cls, rid: str | None = None,
@@ -208,11 +221,26 @@ class BaseModel(metaclass=MetaModel):
 
         return instances
 
+    async def _save_property_changes(self, property_recorder: PropertyChangesRecorder):
+        req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
+               f'where id(n) = {self._rid!r} '
+               f'set {",".join(map(str, property_recorder.changes))};')
+        async with self._database_connection.cursor() as cursor:
+            await cursor.execute(req)
+
     async def save(self) -> None:
+        for property_recorder in self.property_recorders.values():
+            if property_recorder.changes:
+                self._operations_queue.append(self._save_property_changes(property_recorder))
         if self._operations_queue:
             await asyncio.gather(*self._operations_queue)
             await self._database_connection.commit()
             self._operations_queue = []
+
+    async def delete(self) -> None:
+        async with self._database_connection.cursor() as cursor:
+            await cursor.execute(self._get_delete_request())
+            await self._database_connection.commit()
 
     async def load(self) -> None:
         if not self._rid:
@@ -235,7 +263,7 @@ class BaseModel(metaclass=MetaModel):
 
     @staticmethod
     def _transform_properties_to_cypher(properties: dict[str, Any]):
-        return ",".join(f"{index}: {value!r}"
+        return ",".join(f"{index}: {_get_cypher_value(value)}"
                         for index, value in properties.items() if value is not None)
 
     def _split_properties_and_relations(self):

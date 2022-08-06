@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from akiradb.database_connection import DatabaseConnection
 from akiradb.model.base_model import BaseModel
@@ -20,6 +20,7 @@ class SinceProperties(Properties):
 
 class Person(Model):
     name: str
+    today: datetime = datetime(year=1970, month=1, day=1)
     married: bool = False
 
     spouses = relation('married_to',
@@ -28,7 +29,9 @@ class Person(Model):
 
 
 class BetterPerson(Person):
+    birthday: date = date(year=1970, month=1, day=1)
     better_name: str = "Hello World"
+    age: int = 0
 
 
 class Quantity(Properties):
@@ -50,14 +53,14 @@ async def main():
     nana_chans = []
     senpai_kuns = []
     for _ in range(1000):
-        nana_chans.append(BetterPerson(name="Nana-chan"))
-        senpai_kuns.append(Person(name="Senpai-kun", married=False))
+        nana_chans.append(BetterPerson(name="Nana-chan", today=datetime.now()))
+        senpai_kuns.append(Person(name="Senpai-kun", married=False, today=datetime.now()))
 
     await Person.bulk_create(nana_chans)
     await Person.bulk_create(senpai_kuns)
 
-    nana_chan = await Person(name="Nana-chan", married=True).create()
-    senpai_kun = await Person(name="Senpai-kun", married=True).create()
+    nana_chan = await Person(name="Nana-chan", married=True, today=datetime.now()).create()
+    senpai_kun = await Person(name="Senpai-kun", married=True, today=datetime.now()).create()
 
     nana_chan.spouses.add(senpai_kun, SinceProperties(since=str(datetime.now())))
     await nana_chan.save()
@@ -82,8 +85,32 @@ async def main():
     married_nana_chans = await Person.fetch_many((Person.name == 'Nana-chan')
                                                  & (Person.married == True))
     for married_nana_chan in married_nana_chans:
+        married_nana_chan.married = False
         married_nana_chan.name += '-senpai'
+        married_nana_chan.married = True
+        await married_nana_chan.save()
         print(await married_nana_chan.spouses.get())
+
+    vampires = [BetterPerson(name='Yupiel-sama', age=i, today=datetime.now(),
+                             birthday=(date.today() - timedelta(days=i*365.2425)))
+                for i in range(100)]
+    await BetterPerson.bulk_create(vampires)
+
+    for vampire in vampires:
+        vampire.age += 1000
+        await vampire.save()
+
+    old_vampires = await BetterPerson.fetch_many(BetterPerson.age > 1069)
+    await BetterPerson.bulk_delete([vampire for vampire in vampires if vampire.age <= 1069])
+    print(len(old_vampires))
+
+    married_nana_chans = await Person.fetch_many(Person.name == 'Nana-chan-senpai')
+    for married_nana_chan in married_nana_chans:
+        for spouse in [s for s, _ in await married_nana_chan.spouses.get()]:
+            married_nana_chan.spouses.remove(spouse)
+        married_nana_chan.name = 'Nana'
+        married_nana_chan.married = False
+        await married_nana_chan.save()
 
     await Model._database_connection.close()
 

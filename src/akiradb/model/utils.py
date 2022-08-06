@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from typing import Any, Callable, Tuple, TypeVar, Union
 
 _T = TypeVar('_T')
@@ -24,5 +25,21 @@ def _get_cypher_property_type(field_type):
         return 'double'
     elif field_type is bytes:
         return 'byte'
+    elif field_type is date:
+        return 'date'
+    elif field_type is datetime:
+        return 'datetime'
     else:
         return 'string'
+
+
+def _get_cypher_value(value):
+    from akiradb.model.proxies import PropertyChangesRecorder
+    if isinstance(value, PropertyChangesRecorder):
+        value = value.value
+    if isinstance(value, date):
+        return f"'{value.isoformat()}'"
+    elif isinstance(value, datetime):
+        return f"'{value.isoformat()}'"
+    else:
+        return repr(value)

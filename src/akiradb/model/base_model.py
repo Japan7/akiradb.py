@@ -228,14 +228,22 @@ class BaseModel(metaclass=MetaModel):
         async with self._database_connection.cursor() as cursor:
             await cursor.execute(req)
 
-    async def save(self) -> None:
+    async def save(self, commit=True) -> None:
         for property_recorder in self.property_recorders.values():
             if property_recorder.changes:
                 self._operations_queue.append(self._save_property_changes(property_recorder))
         if self._operations_queue:
             await asyncio.gather(*self._operations_queue)
-            await self._database_connection.commit()
+            if commit:
+                await self._database_connection.commit()
             self._operations_queue = []
+
+    @staticmethod
+    async def bulk_save(nodes: list[TModel], commit=True):
+        if nodes:
+            await asyncio.gather(*[node.save(False) for node in nodes])
+            if commit:
+                await nodes[0]._database_connection.commit()
 
     async def delete(self) -> None:
         async with self._database_connection.cursor() as cursor:

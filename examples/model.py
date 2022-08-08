@@ -110,7 +110,8 @@ async def main():
             married_nana_chan.spouses.remove(spouse)
         married_nana_chan.name = 'Nana'
         married_nana_chan.married = False
-        await married_nana_chan.save()
+
+    await BaseModel.bulk_save(married_nana_chans)
 
     await Model._database_connection.close()
 

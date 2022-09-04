@@ -18,7 +18,7 @@ class DatabaseConnection():
     async def connect(self):
         self._conn = await psycopg.AsyncConnection.connect(
             f"dbname={self.database} user={self.user} password={self.password} "
-            f"host={self.hostname}", autocommit=True)
+            f"host={self.hostname}", autocommit=True, cursor_factory=psycopg.AsyncClientCursor)
         self._conn.prepare_threshold = None
 
     @contextlib.asynccontextmanager

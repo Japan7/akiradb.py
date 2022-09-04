@@ -1,7 +1,6 @@
 import contextlib
 
 import psycopg
-
 from akiradb.exceptions import AkiraNotConnectedException
 
 

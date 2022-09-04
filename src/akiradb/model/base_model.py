@@ -1,20 +1,16 @@
 import asyncio
-from dataclasses import MISSING, Field, fields, dataclass
-from typing import (
-    TYPE_CHECKING, Any, ClassVar, Coroutine, ParamSpec, Type, TypeVar, cast
-)
+from dataclasses import MISSING, Field, dataclass, fields
+from typing import TYPE_CHECKING, Any, ClassVar, Coroutine, ParamSpec, Type, TypeVar, cast
 
 from psycopg.rows import dict_row
 
 from akiradb.database_connection import DatabaseConnection
-from akiradb.exceptions import (
-    AkiraNodeNotFoundException, AkiraNodeTypeAlreadyDefinedException, AkiraUnknownNodeException
-)
+from akiradb.exceptions import (AkiraNodeNotFoundException,
+                                AkiraNodeTypeAlreadyDefinedException, AkiraUnknownNodeException)
 from akiradb.model.conditions import Condition, PropertyCondition
 from akiradb.model.proxies import PropertyChangesRecorder, PropertyChangesRecorderDescriptor
-from akiradb.model.utils import (
-    __dataclass_transform__, _get_cypher_property_type, _get_cypher_value
-)
+from akiradb.model.utils import (__dataclass_transform__,
+                                 _get_cypher_property_type, _get_cypher_value)
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation

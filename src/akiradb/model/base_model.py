@@ -128,16 +128,35 @@ class BaseModel(metaclass=MetaModel):
             await cls._database_connection.commit()
 
     @classmethod
+    async def bulk_upsert(cls: Type[TModel], nodes: list[tuple[TModel, dict[str, Any]]]):
+        async with cls._database_connection.cursor() as cursor:
+            for node, identifying_properties in nodes:
+                await cursor.execute(
+                    node._get_create_request(identifying_properties=identifying_properties)
+                )
+                async for row in cursor:
+                    assert row is not None
+                    node._rid, = row
+
+            await cls._database_connection.commit()
+
+    @classmethod
     async def bulk_delete(cls: Type[TModel], nodes: list[TModel]):
         async with cls._database_connection.cursor() as cursor:
             for node in nodes:
                 await cursor.execute(node._get_delete_request())
             await cls._database_connection.commit()
 
-    def _get_create_request(self) -> str:
-        return (f'{{cypher}} create (n:{self.__class__.__qualname__} '
-                f'{{{ self._transform_properties_to_cypher(self._properties) }}}) '
-                f'return id(n);')
+    def _get_create_request(self, identifying_properties: dict[str, Any] | None = None) -> str:
+        req = '{cypher} '
+        if identifying_properties:
+            req += (f'merge (n:{self.__class__.__qualname__} '
+                    f'{{{ self._transform_properties_to_cypher(identifying_properties) }}}) '
+                    f'set n = {{{ self._transform_properties_to_cypher(self._properties) }}}')
+        else:
+            req += (f'create (n:{self.__class__.__qualname__} '
+                    f'{{{ self._transform_properties_to_cypher(self._properties) }}})')
+        return req + ' return id(n);'
 
     def _get_delete_request(self) -> str:
         return (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
@@ -153,6 +172,17 @@ class BaseModel(metaclass=MetaModel):
 
     async def create(self):
         req = self._get_create_request()
+
+        async with self._database_connection.execute(req) as cursor:
+            await self._database_connection.commit()
+            row = await cursor.fetchone()
+            assert row is not None
+            self._rid, = row
+
+        return self
+
+    async def upsert(self, **identifying_properties):
+        req = self._get_create_request(identifying_properties=identifying_properties)
 
         async with self._database_connection.execute(req) as cursor:
             await self._database_connection.commit()

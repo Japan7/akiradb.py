@@ -47,6 +47,11 @@ class Player(Model):
     items = relation('possesses', ManyWithProperties[Item, Quantity])
 
 
+class Media(Model):
+    id: int
+    name: str = "None"
+
+
 async def main():
     await Model._database_connection.connect()
 
@@ -112,6 +117,18 @@ async def main():
         married_nana_chan.married = False
 
     await BaseModel.bulk_save(married_nana_chans)
+
+    await Media.bulk_delete(await Media.fetch_all())
+    medias = [Media(id=1), Media(id=2)]
+    await Media.bulk_create(medias)
+    print([f'(rid: {m._rid}, {m})' for m in medias])
+
+    medias[0].name = 'FLCL'
+    medias[1].name = 'Serial Experiments Lain'
+    medias.append(Media(id=3, name='Neon Genesis Evangelion'))
+
+    await Media.bulk_upsert([(m, {'id': m.id}) for m in medias])
+    print([f'(rid: {m._rid}, {m})' for m in medias])
 
     await Model._database_connection.close()
 

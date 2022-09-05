@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field, fields
 from functools import partial
@@ -64,21 +65,21 @@ class Many(Relation[TModel]):
 
     def add(self, element: TModel, invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._link(self._source, element))
+            asyncio.create_task(self._source._add_operation(self._link(self._source, element)))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._link(element, self._source)
-                )
+                ))
                 getattr(element, self._attribute_name).add(self._source, invert_operation=True)
         self._elements.append(element)
 
     def remove(self, element: TModel, invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._unlink(self._source, element))
+            asyncio.create_task(self._source._add_operation(self._unlink(self._source, element)))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._unlink(element, self._source)
-                )
+                ))
                 getattr(element, self._attribute_name).remove(self._source, invert_operation=True)
         with suppress(ValueError):
             self._elements.remove(element)
@@ -117,21 +118,21 @@ class One(Relation[TModel]):
 
     def set(self, element: TModel, invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._link(self._source, element))
+            asyncio.create_task(self._source._add_operation(self._link(self._source, element)))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._link(element, self._source)
-                )
+                ))
                 getattr(element, self._attribute_name).set(self._source, invert_operation=True)
         self._element = element
 
     def unset(self, element: TModel, invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._unlink(self._source, element))
+            asyncio.create_task(self._source._add_operation(self._unlink(self._source, element)))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._unlink(element, self._source)
-                )
+                ))
                 getattr(element, self._attribute_name).unset(self._source, invert_operation=True)
         self._element = None
 
@@ -199,11 +200,13 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
             properties: TProperties,
             invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._link(self._source, element, properties))
+            asyncio.create_task(self._source._add_operation(
+                self._link(self._source, element, properties)
+            ))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._link(element, self._source, properties)
-                )
+                ))
                 getattr(element, self._attribute_name).add(self._source, properties,
                                                            invert_operation=True)
         self._elements.append(element)
@@ -212,11 +215,11 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
     def remove(self, element: TModel,  # type: ignore[override]
                invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._unlink(self._source, element))
+            asyncio.create_task(self._source._add_operation(self._unlink(self._source, element)))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._unlink(element, self._source)
-                )
+                ))
                 getattr(element, self._attribute_name).remove(self._source, invert_operation=True)
 
         with suppress(ValueError):
@@ -273,11 +276,13 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
     def set(self, element: TModel, properties: TProperties,  # type: ignore[override]
             invert_operation=False):
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._link(self._source, element, properties))
+            asyncio.create_task(self._source._add_operation(
+                self._link(self._source, element, properties)
+            ))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._link(element, self._source, properties)
-                )
+                ))
                 getattr(element, self._attribute_name).set(self._source, properties,
                                                            invert_operation=True)
         self._element = element
@@ -285,11 +290,11 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
 
     def unset(self, element: TModel, invert_operation=False):  # type: ignore[override]
         if self._source and not invert_operation:
-            self._source._operations_queue.append(self._unlink(self._source, element))
+            asyncio.create_task(self._source._add_operation(self._unlink(self._source, element)))
             if self._bidirectionnal:
-                self._source._operations_queue.append(
+                asyncio.create_task(self._source._add_operation(
                     self._unlink(element, self._source)
-                )
+                ))
                 getattr(element, self._attribute_name).unset(self._source, invert_operation=True)
 
         self._element = None

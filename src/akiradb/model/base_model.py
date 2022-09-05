@@ -89,6 +89,7 @@ class BaseModel(metaclass=MetaModel):
     def __post_init__(self):
         self._rid: str
         self._operations_queue = []
+        self._operations_queue_lock = asyncio.Lock()
         self._properties, self._relations = self._split_properties_and_relations()
         self.property_recorders: dict[str, PropertyChangesRecorder]
         for property_name, _ in self._properties.items():
@@ -258,6 +259,10 @@ class BaseModel(metaclass=MetaModel):
 
         return instances
 
+    async def _add_operation(self, operation):
+        async with self._operations_queue_lock:
+            self._operations_queue.append(operation)
+
     def _save_property_changes(self, property_recorder: PropertyChangesRecorder):
         async def coroutine(cursor):
             req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
@@ -267,12 +272,13 @@ class BaseModel(metaclass=MetaModel):
         return coroutine
 
     async def _save(self, cursor) -> None:
-        for property_recorder in self.property_recorders.values():
-            if property_recorder.changes:
-                self._operations_queue.append(self._save_property_changes(property_recorder))
-        if self._operations_queue:
-            await asyncio.gather(*[coroutine(cursor) for coroutine in self._operations_queue])
-            self._operations_queue = []
+        async with self._operations_queue_lock:
+            for property_recorder in self.property_recorders.values():
+                if property_recorder.changes:
+                    self._operations_queue.append(self._save_property_changes(property_recorder))
+            if self._operations_queue:
+                await asyncio.gather(*[coroutine(cursor) for coroutine in self._operations_queue])
+                self._operations_queue = []
 
     async def save(self):
         async with self._database_connection.cursor() as cursor:
@@ -292,8 +298,9 @@ class BaseModel(metaclass=MetaModel):
         if not self._rid:
             raise AkiraUnknownNodeException()
 
-        if self._operations_queue:
-            self._operations_queue = []
+        async with self._operations_queue_lock:
+            if self._operations_queue:
+                self._operations_queue = []
 
         req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
                f'where id(n) = "{self._rid}" return n;')

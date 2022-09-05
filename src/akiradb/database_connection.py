@@ -43,8 +43,9 @@ class DatabaseConnection():
         if not self._conn:
             raise AkiraNotConnectedException()
 
-        async with self._conn.cursor(**kwargs) as cur:
-            yield cur
+        async with self._conn.transaction():
+            async with self._conn.cursor(**kwargs) as cur:
+                yield cur
 
     async def commit(self):
         if not self._conn:

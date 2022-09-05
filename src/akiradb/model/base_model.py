@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import MISSING, Field, dataclass, fields
-from typing import TYPE_CHECKING, Any, ClassVar, Coroutine, ParamSpec, Type, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, ParamSpec, Type, TypeVar, cast
 
 from psycopg.rows import dict_row
 
@@ -88,7 +88,7 @@ class BaseModel(metaclass=MetaModel):
 
     def __post_init__(self):
         self._rid: str
-        self._operations_queue: list[Coroutine] = []
+        self._operations_queue = []
         self._properties, self._relations = self._split_properties_and_relations()
         self.property_recorders: dict[str, PropertyChangesRecorder]
         for property_name, _ in self._properties.items():
@@ -125,8 +125,6 @@ class BaseModel(metaclass=MetaModel):
                     assert row is not None
                     node._rid, = row
 
-            await cls._database_connection.commit()
-
     @classmethod
     async def bulk_upsert(cls: Type[TModel], nodes: list[tuple[TModel, dict[str, Any]]]):
         async with cls._database_connection.cursor() as cursor:
@@ -138,14 +136,11 @@ class BaseModel(metaclass=MetaModel):
                     assert row is not None
                     node._rid, = row
 
-            await cls._database_connection.commit()
-
     @classmethod
     async def bulk_delete(cls: Type[TModel], nodes: list[TModel]):
         async with cls._database_connection.cursor() as cursor:
             for node in nodes:
                 await cursor.execute(node._get_delete_request())
-            await cls._database_connection.commit()
 
     def _get_create_request(self, identifying_properties: dict[str, Any] | None = None) -> str:
         req = '{cypher} '
@@ -173,8 +168,8 @@ class BaseModel(metaclass=MetaModel):
     async def create(self):
         req = self._get_create_request()
 
-        async with self._database_connection.execute(req) as cursor:
-            await self._database_connection.commit()
+        async with self._database_connection.cursor() as cursor:
+            await cursor.execute(req)
             row = await cursor.fetchone()
             assert row is not None
             self._rid, = row
@@ -184,8 +179,8 @@ class BaseModel(metaclass=MetaModel):
     async def upsert(self, **identifying_properties):
         req = self._get_create_request(identifying_properties=identifying_properties)
 
-        async with self._database_connection.execute(req) as cursor:
-            await self._database_connection.commit()
+        async with self._database_connection.cursor() as cursor:
+            await cursor.execute(req)
             row = await cursor.fetchone()
             assert row is not None
             self._rid, = row
@@ -263,34 +258,35 @@ class BaseModel(metaclass=MetaModel):
 
         return instances
 
-    async def _save_property_changes(self, property_recorder: PropertyChangesRecorder):
-        req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
-               f'where id(n) = {self._rid!r} '
-               f'set {",".join(map(str, property_recorder.changes))};')
-        async with self._database_connection.cursor() as cursor:
+    def _save_property_changes(self, property_recorder: PropertyChangesRecorder):
+        async def coroutine(cursor):
+            req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
+                   f'where id(n) = {self._rid!r} '
+                   f'set {",".join(map(str, property_recorder.changes))};')
             await cursor.execute(req)
+        return coroutine
 
-    async def save(self, commit=True) -> None:
+    async def _save(self, cursor) -> None:
         for property_recorder in self.property_recorders.values():
             if property_recorder.changes:
                 self._operations_queue.append(self._save_property_changes(property_recorder))
         if self._operations_queue:
-            await asyncio.gather(*self._operations_queue)
-            if commit:
-                await self._database_connection.commit()
+            await asyncio.gather(*[coroutine(cursor) for coroutine in self._operations_queue])
             self._operations_queue = []
 
+    async def save(self):
+        async with self._database_connection.cursor() as cursor:
+            await self._save(cursor)
+
     @staticmethod
-    async def bulk_save(nodes: list[TModel], commit=True):
+    async def bulk_save(nodes: list[TModel]):
         if nodes:
-            await asyncio.gather(*[node.save(False) for node in nodes])
-            if commit:
-                await nodes[0]._database_connection.commit()
+            async with nodes[0]._database_connection.cursor() as cursor:
+                await asyncio.gather(*[node._save(cursor) for node in nodes])
 
     async def delete(self) -> None:
         async with self._database_connection.cursor() as cursor:
             await cursor.execute(self._get_delete_request())
-            await self._database_connection.commit()
 
     async def load(self) -> None:
         if not self._rid:

@@ -21,24 +21,24 @@ class Relation(Generic[TModel]):
         self._attribute_name: str
         self._loaded = False
 
-    async def _link(self, source: BaseModel, target: BaseModel,
-                    properties: Union['Properties', None] = None):
-        req = (f"{{cypher}} match (s), (t) "
-               f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
-               f"create (s)-[:{self._name} {{"
-               f"{properties._to_cypher() if properties else ''}"
-               f"}}]->(t);")
+    def _link(self, source: BaseModel, target: BaseModel,
+              properties: Union['Properties', None] = None):
+        async def coroutine(cursor):
+            req = (f"{{cypher}} match (s), (t) "
+                   f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
+                   f"create (s)-[:{self._name} {{"
+                   f"{properties._to_cypher() if properties else ''}"
+                   f"}}]->(t);")
+            await cursor.execute(req)
+        return coroutine
 
-        async with source._database_connection.execute(req):
-            pass
-
-    async def _unlink(self, source: BaseModel, target: BaseModel):
-        req = (f"{{cypher}} match (s)-[r:{self._name}]->(t) "
-               f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
-               f"delete r;")
-
-        async with source._database_connection.execute(req):
-            pass
+    def _unlink(self, source: BaseModel, target: BaseModel):
+        async def coroutine(cursor):
+            req = (f"{{cypher}} match (s)-[r:{self._name}]->(t) "
+                   f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
+                   f"delete r;")
+            await cursor.execute(req)
+        return coroutine
 
     def _get_target_match_request(self, target_cls, properties_cls=None):
         assert self._source

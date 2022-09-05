@@ -1,3 +1,4 @@
+from asyncio import Lock
 import contextlib
 
 import psycopg
@@ -14,6 +15,7 @@ class DatabaseConnection():
         self.password = password
 
         self._conn = None
+        self._conn_transaction_lock = Lock()
 
     async def connect(self):
         self._conn = await psycopg.AsyncConnection.connect(
@@ -43,9 +45,11 @@ class DatabaseConnection():
         if not self._conn:
             raise AkiraNotConnectedException()
 
-        async with self._conn.transaction():
-            async with self._conn.cursor(**kwargs) as cur:
-                yield cur
+        # Only a single transaction per connection
+        async with self._conn_transaction_lock:
+            async with self._conn.transaction():
+                async with self._conn.cursor(**kwargs) as cur:
+                    yield cur
 
     async def commit(self):
         if not self._conn:

@@ -1,5 +1,6 @@
 from datetime import date, datetime
-from typing import Any, Callable, Tuple, TypeVar, Union
+from types import NoneType, UnionType
+from typing import Any, Callable, Tuple, TypeVar, Union, get_args, get_origin
 
 _T = TypeVar('_T')
 
@@ -17,6 +18,9 @@ def __dataclass_transform__(
 
 
 def _get_cypher_property_type(field_type):
+    if get_origin(field_type) in [Union, UnionType]:
+        field_type = [t for t in get_args(field_type) if t is not NoneType][0]
+
     if field_type is int:
         return 'integer'
     elif field_type is bool:
@@ -37,7 +41,10 @@ def _get_cypher_value(value):
     from akiradb.model.proxies import PropertyChangesRecorder
     if isinstance(value, PropertyChangesRecorder):
         value = value.value
-    if isinstance(value, date):
+
+    if value is None:
+        return "null"
+    elif isinstance(value, date):
         return f"'{value.isoformat()}'"
     elif isinstance(value, datetime):
         return f"'{value.isoformat()}'"

@@ -209,8 +209,13 @@ class BaseModel(metaclass=MetaModel):
                 raise AkiraNodeNotFoundException()
 
             parameters = {name: value for (name, value) in row.items()
-                          if not name.startswith('@') and value is not None}
-            instance = MetaModel._models[row['@type']](**parameters)
+                          if not name.startswith('@') and value is not None
+                          and value != '  cypher.null'}
+            inst_cls = MetaModel._models[row['@type']]
+            for property_name in inst_cls._properties_names:
+                if property_name not in parameters.keys():
+                    parameters[property_name] = None
+            instance = inst_cls(**parameters)
             instance._rid = row['@rid']
 
         return instance
@@ -224,8 +229,14 @@ class BaseModel(metaclass=MetaModel):
             await cursor.execute(req)
             async for row in cursor:
                 parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@') and value is not None}
-                instance = MetaModel._models[row['@type']](**parameters)
+                              if not name.startswith('@') and value is not None
+                              and value != '  cypher.null'}
+
+                inst_cls = MetaModel._models[row['@type']]
+                for property_name in inst_cls._properties_names:
+                    if property_name not in parameters.keys():
+                        parameters[property_name] = None
+                instance = inst_cls(**parameters)
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -240,8 +251,13 @@ class BaseModel(metaclass=MetaModel):
             await cursor.execute(req)
             async for row in cursor:
                 parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@') and value is not None}
-                instance = MetaModel._models[row['@type']](**parameters)
+                              if not name.startswith('@') and value is not None
+                              and value != '  cypher.null'}
+                inst_cls = MetaModel._models[row['@type']]
+                for property_name in inst_cls._properties_names:
+                    if property_name not in parameters.keys():
+                        parameters[property_name] = None
+                instance = inst_cls(**parameters)
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -298,7 +314,7 @@ class BaseModel(metaclass=MetaModel):
     @staticmethod
     def _transform_properties_to_cypher(properties: dict[str, Any]):
         return ",".join(f"{index}: {_get_cypher_value(value)}"
-                        for index, value in properties.items() if value is not None)
+                        for index, value in properties.items())
 
     def _split_properties_and_relations(self):
         properties: dict[str, Any] = {}

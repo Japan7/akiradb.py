@@ -1,7 +1,7 @@
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field, fields
 from functools import partial
-from typing import ForwardRef, Generic, Type, TypeVar, Union, cast
+from typing import ClassVar, ForwardRef, Generic, Type, TypeVar, Union, cast
 
 from psycopg.rows import dict_row
 
@@ -97,8 +97,13 @@ class Many(Relation[TModel]):
                 await cursor.execute(req)
                 async for row in cursor:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.') and value is not None}
-                    instance = MetaModel._models[row['labels(n2)']](**parameters)
+                                  if name.startswith('n2.') and value is not None
+                                  and value != '  cypher.null'}
+                    inst_cls = MetaModel._models[row['labels(n2)']]
+                    for property_name in inst_cls._properties_names:
+                        if property_name not in parameters.keys():
+                            parameters[property_name] = None
+                    instance = inst_cls(**parameters)
                     instance._rid = row['id(n2)']
                     self._elements.append(instance)
 
@@ -145,8 +150,13 @@ class One(Relation[TModel]):
                 row = await cursor.fetchone()
                 if row:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.') and value is not None}
-                    instance = MetaModel._models[row['labels(n2)']](**parameters)
+                                  if name.startswith('n2.') and value is not None
+                                  and value != '  cypher.null'}
+                    inst_cls = MetaModel._models[row['labels(n2)']]
+                    for property_name in inst_cls._properties_names:
+                        if property_name not in parameters.keys():
+                            parameters[property_name] = None
+                    instance = inst_cls(**parameters)
                     instance._rid = row['id(n2)']
                     self._element = instance
 
@@ -160,11 +170,18 @@ class MetaProperties(type):
     def __new__(cls, name, bases, dct):
         instance = cast(Type, super().__new__(cls, name, bases, dct))
         dataclass_instance = dataclass(instance)
+
+        dataclass_instance._properties_names = []
+        for c_field in fields(dataclass_instance):
+            dataclass_instance._properties_names.append(c_field.name)
+
         MetaProperties._properties[name] = dataclass_instance
         return dataclass_instance
 
 
 class Properties(metaclass=MetaProperties):
+    _properties_names: ClassVar[list[str]]
+
     def _to_cypher(self):
         return ",".join(f"{index}: {_get_cypher_value(value)}"
                         for index, value in asdict(self).items())
@@ -227,11 +244,20 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
                 await cursor.execute(req)
                 async for row in cursor:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.') and value is not None}
-                    instance = MetaModel._models[row['labels(n2)']](**parameters)
+                                  if name.startswith('n2.') and value is not None
+                                  and value != '  cypher.null'}
+                    inst_cls = MetaModel._models[row['labels(n2)']]
+                    for property_name in inst_cls._properties_names:
+                        if property_name not in parameters.keys():
+                            parameters[property_name] = None
+                    instance = inst_cls(**parameters)
                     instance._rid = row['id(n2)']
                     properties_parameters = {name[2:]: value for (name, value) in row.items()
-                                             if name.startswith('r.')}
+                                             if name.startswith('r.') and value is not None
+                                             and value != '  cypher.null'}
+                    for property_name in properties_cls._properties_names:  # type: ignore
+                        if property_name not in properties_parameters.keys():
+                            properties_parameters[property_name] = None
                     properties_instance = properties_cls(**properties_parameters)  # type: ignore
                     self._elements.append(instance)
                     self._properties.append(properties_instance)
@@ -290,11 +316,20 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
                 row = await cursor.fetchone()
                 if row:
                     parameters = {name[3:]: value for (name, value) in row.items()
-                                  if name.startswith('n2.')}
-                    instance = MetaModel._models[row['labels(n2)']](**parameters)
+                                  if name.startswith('n2.') and value is not None
+                                  and value != '  cypher.null'}
+                    inst_cls = MetaModel._models[row['labels(n2)']]
+                    for property_name in inst_cls._properties_names:
+                        if property_name not in parameters.keys():
+                            parameters[property_name] = None
+                    instance = inst_cls(**parameters)
                     instance._rid = row['id(n2)']
                     properties_parameters = {name[2:]: value for (name, value) in row.items()
-                                             if name.startswith('r.') and value is not None}
+                                             if name.startswith('r.') and value is not None
+                                             and value != '  cypher.null'}
+                    for property_name in properties_cls._properties_names:  # type: ignore
+                        if property_name not in properties_parameters.keys():
+                            properties_parameters[property_name] = None
                     properties_instance = properties_cls(**properties_parameters)  # type: ignore
                     self._element = instance
                     self._properties = properties_instance

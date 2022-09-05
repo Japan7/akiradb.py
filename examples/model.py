@@ -1,5 +1,6 @@
 import asyncio
 from datetime import date, datetime, timedelta
+from typing import Optional
 
 from akiradb.database_connection import DatabaseConnection
 from akiradb.model.base_model import BaseModel
@@ -15,11 +16,11 @@ class Model(BaseModel, database_connection=database_connection):
 
 
 class SinceProperties(Properties):
-    since: str
+    since: Optional[str]
 
 
 class Person(Model):
-    name: str
+    name: Optional[str]
     today: datetime = datetime(year=1970, month=1, day=1)
     married: bool = False
 
@@ -67,7 +68,7 @@ async def main():
     nana_chan = await Person(name="Nana-chan", married=True, today=datetime.now()).create()
     senpai_kun = await Person(name="Senpai-kun", married=True, today=datetime.now()).create()
 
-    nana_chan.spouses.add(senpai_kun, SinceProperties(since=str(datetime.now())))
+    nana_chan.spouses.add(senpai_kun, SinceProperties(since=None))
     await nana_chan.save()
 
     player1 = await Player().create()
@@ -129,6 +130,12 @@ async def main():
 
     await Media.bulk_upsert([(m, {'id': m.id}) for m in medias])
     print([f'(rid: {m._rid}, {m})' for m in medias])
+
+    nonePerson = Person(name=None)
+    await nonePerson.create()
+
+    nonePerson2 = await Person.fetch_one(None, rid=nonePerson._rid)
+    print(nonePerson2.name)
 
     await Model._database_connection.close()
 

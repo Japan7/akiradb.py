@@ -92,7 +92,8 @@ async def main():
                                                  & (Person.married == True))
     for married_nana_chan in married_nana_chans:
         married_nana_chan.married = False
-        married_nana_chan.name += '-senpai'
+        if married_nana_chan.name:
+            married_nana_chan.name += '-senpai'
         married_nana_chan.married = True
         await married_nana_chan.save()
         print(await married_nana_chan.spouses.get())

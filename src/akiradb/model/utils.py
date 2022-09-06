@@ -1,6 +1,9 @@
+from dataclasses import fields
 from datetime import date, datetime
 from types import NoneType, UnionType
 from typing import Any, Callable, Tuple, TypeVar, Union, get_args, get_origin
+
+import akiradb
 
 _T = TypeVar('_T')
 
@@ -50,3 +53,25 @@ def _get_cypher_value(value):
         return f"'{value.isoformat()}'"
     else:
         return repr(value)
+
+
+def _parse_cypher_properties(properties: dict[str, Any],
+                             model_cls: 'akiradb.model.base_model.MetaModel'):
+    for model_field in fields(model_cls):
+        if model_field.name in model_cls._properties_names:
+            if model_field.name in properties:
+                parsed_value = properties[model_field.name]
+
+                if parsed_value == '  cypher.null':
+                    parsed_value = None
+                if parsed_value:
+                    if model_field.type is date:
+                        parsed_value = date.fromtimestamp(parsed_value//1000)
+                    elif model_field.type is datetime:
+                        parsed_value = datetime.fromtimestamp(parsed_value//1000)
+
+                properties[model_field.name] = parsed_value
+            else:
+                properties[model_field.name] = None
+
+    return model_cls(**properties)

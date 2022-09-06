@@ -3,6 +3,7 @@ import contextlib
 
 import psycopg
 from akiradb.exceptions import AkiraNotConnectedException
+from akiradb.types import loaders
 
 
 class DatabaseConnection():
@@ -22,6 +23,7 @@ class DatabaseConnection():
             f"dbname={self.database} user={self.user} password={self.password} "
             f"host={self.hostname}", autocommit=True, cursor_factory=psycopg.AsyncClientCursor)
         self._conn.prepare_threshold = None
+        self._conn.adapters._loaders[1][self._conn.adapters.types['date'].oid] = loaders.IntBinaryLoader
 
     @contextlib.asynccontextmanager
     async def execute(self, command):

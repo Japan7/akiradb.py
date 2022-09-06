@@ -10,7 +10,7 @@ from akiradb.exceptions import (AkiraNodeNotFoundException,
 from akiradb.model.conditions import Condition, PropertyCondition
 from akiradb.model.proxies import PropertyChangesRecorder, PropertyChangesRecorderDescriptor
 from akiradb.model.utils import (__dataclass_transform__,
-                                 _get_cypher_property_type, _get_cypher_value)
+                                 _get_cypher_property_type, _get_cypher_value, _parse_cypher_properties)
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation
@@ -204,14 +204,10 @@ class BaseModel(metaclass=MetaModel):
             if not row:
                 raise AkiraNodeNotFoundException()
 
-            parameters = {name: value for (name, value) in row.items()
-                          if not name.startswith('@') and value is not None
-                          and value != '  cypher.null'}
-            inst_cls = MetaModel._models[row['@type']]
-            for property_name in inst_cls._properties_names:
-                if property_name not in parameters.keys():
-                    parameters[property_name] = None
-            instance = inst_cls(**parameters)
+            instance = _parse_cypher_properties({name: value for (name, value) in row.items()
+                                                 if not name.startswith('@')
+                                                 and value is not None},
+                                                MetaModel._models[row['@type']])
             instance._rid = row['@rid']
 
         return instance
@@ -224,15 +220,10 @@ class BaseModel(metaclass=MetaModel):
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
             await cursor.execute(req)
             async for row in cursor:
-                parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@') and value is not None
-                              and value != '  cypher.null'}
-
-                inst_cls = MetaModel._models[row['@type']]
-                for property_name in inst_cls._properties_names:
-                    if property_name not in parameters.keys():
-                        parameters[property_name] = None
-                instance = inst_cls(**parameters)
+                instance = _parse_cypher_properties({name: value for (name, value) in row.items()
+                                                     if not name.startswith('@')
+                                                     and value is not None},
+                                                    MetaModel._models[row['@type']])
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -246,14 +237,10 @@ class BaseModel(metaclass=MetaModel):
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
             await cursor.execute(req)
             async for row in cursor:
-                parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@') and value is not None
-                              and value != '  cypher.null'}
-                inst_cls = MetaModel._models[row['@type']]
-                for property_name in inst_cls._properties_names:
-                    if property_name not in parameters.keys():
-                        parameters[property_name] = None
-                instance = inst_cls(**parameters)
+                instance = _parse_cypher_properties({name: value for (name, value) in row.items()
+                                                     if not name.startswith('@')
+                                                     and value is not None},
+                                                    MetaModel._models[row['@type']])
                 instance._rid = row['@rid']
                 instances.append(instance)
 

@@ -47,10 +47,8 @@ def _get_cypher_value(value):
 
     if value is None:
         return "null"
-    elif isinstance(value, date):
-        return f"'{value.isoformat()}'"
     elif isinstance(value, datetime):
-        return f"'{value.isoformat()}'"
+        return value
     else:
         return repr(value)
 
@@ -64,11 +62,6 @@ def _parse_cypher_properties(properties: dict[str, Any],
 
                 if parsed_value == '  cypher.null':
                     parsed_value = None
-                if parsed_value:
-                    if model_field.type is date:
-                        parsed_value = date.fromtimestamp(parsed_value//1000)
-                    elif model_field.type is datetime:
-                        parsed_value = datetime.fromtimestamp(parsed_value//1000)
 
                 properties[model_field.name] = parsed_value
             else:

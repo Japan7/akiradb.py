@@ -1,6 +1,6 @@
 from decimal import Decimal
 from datetime import datetime
-from psycopg.adapt import Dumper
+from psycopg.adapt import Dumper, PyFormat, RecursiveDumper
 from psycopg.pq import Format
 from psycopg.adapt import AdaptersMap
 
@@ -40,9 +40,28 @@ class DatetimeDumper(Dumper):
         return repr(int(obj.timestamp()*1000)).encode('utf-8')
 
 
+class DictDumper(RecursiveDumper):
+    format = Format.TEXT
+
+    def dump(self, _: dict) -> bytes:
+        return '{}'.encode('utf-8')
+
+    def quote(self, obj: dict) -> bytes:
+        format = PyFormat.from_pq(self.format)
+        res = b''
+        first = True
+        for (key, value) in obj.items():
+            if not first:
+                res += b','
+            res += key.encode('utf-8') + b':' + self._tx.get_dumper(value, format).quote(value)
+            first = False
+        return b'{' + res + b'}'
+
+
 def register_dumpers(adapters: AdaptersMap):
     adapters.register_dumper(str, StringDumper)
     adapters.register_dumper(int, IntDumper)
     adapters.register_dumper(bool, BoolDumper)
     adapters.register_dumper(float, FloatDumper)
+    adapters.register_dumper(dict, DictDumper)
     adapters.register_dumper('datetime.datetime', DatetimeDumper)

@@ -60,10 +60,10 @@ async def main():
     await Model._database_connection.connect()
 
     async with Model._database_connection.cursor(row_factory=dict_row) as cursor:
-        print(cursor.mogrify('{cypher} create (p:Person {name: %(name)s, today: %(today)s, married: %(married)s, test: %(test)s, testi: %(testi)s}) return p;',
-            {"name": "Test", "today": datetime.now(), "married": True, "test": 42.69e255, "testi": 1337}))
-        await cursor.execute('{cypher} create (p:Person {name: %(name)s, today: %(today)s, married: %(married)s, test: %(test)s, testi: %(testi)s}) return p;',
-                {"name": "Test", "today": datetime.now(), "married": True, "test": 42.69e255, "testi": 1337})
+        print(cursor.mogrify('{cypher} create (p:Person %(attrs)s) return p;',
+            {"attrs": {"name": "Test", "today": datetime.now(), "married": True, "test": 42.69e255, "testi": 1337}}))
+        await cursor.execute('{cypher} create (p:Person %(attrs)s) return p;',
+                {"attrs": {"name": "Test", "today": datetime.now(), "married": True, "test": 42.69e255, "testi": 1337}})
         found = {}
         async for row in cursor:
             found = row

@@ -23,9 +23,8 @@ class DatabaseConnection():
             f"dbname={self.database} user={self.user} password={self.password} "
             f"host={self.hostname}", autocommit=True, cursor_factory=psycopg.AsyncClientCursor)
         self._conn.prepare_threshold = None
-        self._conn.adapters.register_loader('date', loaders.DatetimeLoader)
-        self._conn.adapters.register_loader('varchar', loaders.StringLoader)
-        self._conn.adapters.register_dumper('datetime.datetime', dumpers.DatetimeDumper)
+        loaders.register_loaders(self._conn.adapters)
+        dumpers.register_dumpers(self._conn.adapters)
 
     @contextlib.asynccontextmanager
     async def execute(self, command):

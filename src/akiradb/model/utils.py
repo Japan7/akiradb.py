@@ -30,10 +30,6 @@ def _get_cypher_property_type(field_type):
         return 'boolean'
     elif field_type is float:
         return 'double'
-    elif field_type is bytes:
-        return 'byte'
-    elif field_type is date:
-        return 'date'
     elif field_type is datetime:
         return 'datetime'
     else:

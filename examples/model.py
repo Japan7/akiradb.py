@@ -24,6 +24,8 @@ class Person(Model):
     name: Optional[str]
     today: datetime# = datetime(year=1970, month=1, day=1)
     married: bool = False
+    testi: int = 0
+    test: float = 0.0
 
     spouses = relation('married_to',
                        ManyWithProperties["Person", SinceProperties],
@@ -58,8 +60,10 @@ async def main():
     await Model._database_connection.connect()
 
     async with Model._database_connection.cursor(row_factory=dict_row) as cursor:
-        await cursor.execute('{cypher} create (p:Person {name: %(name)s, today: %(today)s}) return p;',
-                             {"name": "Test", "today": datetime.now()})
+        print(cursor.mogrify('{cypher} create (p:Person {name: %(name)s, today: %(today)s, married: %(married)s, test: %(test)s, testi: %(testi)s}) return p;',
+            {"name": "Test", "today": datetime.now(), "married": True, "test": 42.69e255, "testi": 1337}))
+        await cursor.execute('{cypher} create (p:Person {name: %(name)s, today: %(today)s, married: %(married)s, test: %(test)s, testi: %(testi)s}) return p;',
+                {"name": "Test", "today": datetime.now(), "married": True, "test": 42.69e255, "testi": 1337})
         found = {}
         async for row in cursor:
             found = row

@@ -1,49 +1,63 @@
-from typing import Any
+from typing import Any, cast
 
-from akiradb.model.utils import _get_cypher_value
+from akiradb.types.query import Params, Query
 
 
 class Change():
-    pass
+    def _query(self, _: int = 0):
+        return ('Unknown Change', {})
 
 
 class NewValue(Change):
     def __init__(self, property_name: str, new_value: Any):
-        self.property_name = property_name
+        self.property_name: Query = cast(Query, property_name)
         self.new_value = new_value
 
-    def __str__(self):
-        return f'n.{self.property_name} = {_get_cypher_value(self.new_value)}'
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        value_name = cast(Query, f'value{value_id}')
+        return 'n.' + self.property_name + ' = %(' + value_name + ')', {value_name: self.new_value}
 
 
 class Addition(Change):
     def __init__(self, property_name: str, add_value: Any):
-        self.property_name = property_name
+        self.property_name: Query = cast(Query, property_name)
         self.add_value = add_value
 
-    def __str__(self):
-        return (f'n.{self.property_name} = n.{self.property_name} + '
-                f'{_get_cypher_value(self.add_value)}')
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        value_name = cast(Query, f'value{value_id}')
+        return (
+            'n.' + self.property_name + ' = n.' + self.property_name
+            + ' + %(' + value_name + ')',
+            {value_name: self.add_value}
+        )
 
 
 class Substraction(Change):
     def __init__(self, property_name: str, sub_value: Any):
-        self.property_name = property_name
+        self.property_name: Query = cast(Query, property_name)
         self.sub_value = sub_value
 
-    def __str__(self):
-        return (f'n.{self.property_name} = n.{self.property_name} - '
-                f'{_get_cypher_value(self.sub_value)}')
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        value_name = cast(Query, f'value{value_id}')
+        return (
+            'n.' + self.property_name + ' = n.' + self.property_name
+            + ' - %(' + value_name + ')',
+            {value_name: self.sub_value}
+        )
 
 
 class Multiplication(Change):
     def __init__(self, property_name: str, mult_value: Any):
-        self.property_name = property_name
+        self.property_name: Query = cast(Query, property_name)
         self.mult_value = mult_value
 
-    def __str__(self):
-        return (f'n.{self.property_name} = n.{self.property_name} * '
-                f'{_get_cypher_value(self.mult_value)}')
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        value_name = cast(Query, f'value{value_id}')
+        return (
+            'n.' + self.property_name + ' = n.' + self.property_name
+            + ' * %(' + value_name + ')',
+            {value_name: self.mult_value}
+        )
 
 
 class PropertyChangesRecorder():

@@ -1,9 +1,22 @@
 from asyncio import Lock
 import contextlib
+from typing import AsyncGenerator
 
 import psycopg
 from akiradb.exceptions import AkiraNotConnectedException
 from akiradb.types import loaders, dumpers
+from akiradb.types.query import Params, Query
+
+
+class AkiraAsyncClientCursor(psycopg.AsyncClientCursor):
+    async def execute(self: psycopg.AsyncClientCursor._Self, query: Query,
+                      params: Params = None) -> psycopg.AsyncClientCursor._Self:
+        await super().execute(query, params)
+        return self
+
+    async def execute_cypher(self: psycopg.AsyncClientCursor._Self, query: Query,
+                             params: Params = None) -> psycopg.AsyncClientCursor._Self:
+        return await self.execute(f'{{cypher}} {query};', params)
 
 
 class DatabaseConnection():
@@ -21,7 +34,7 @@ class DatabaseConnection():
     async def connect(self):
         self._conn = await psycopg.AsyncConnection.connect(
             f"dbname={self.database} user={self.user} password={self.password} "
-            f"host={self.hostname}", autocommit=True, cursor_factory=psycopg.AsyncClientCursor)
+            f"host={self.hostname}", autocommit=True, cursor_factory=AkiraAsyncClientCursor)
         self._conn.prepare_threshold = None
         loaders.register_loaders(self._conn.adapters)
         dumpers.register_dumpers(self._conn.adapters)
@@ -44,7 +57,7 @@ class DatabaseConnection():
             yield pipeline
 
     @contextlib.asynccontextmanager
-    async def cursor(self, **kwargs):
+    async def cursor(self, **kwargs) -> AsyncGenerator[AkiraAsyncClientCursor, None]:
         if not self._conn:
             raise AkiraNotConnectedException()
 
@@ -52,7 +65,7 @@ class DatabaseConnection():
         async with self._conn_transaction_lock:
             async with self._conn.transaction():
                 async with self._conn.cursor(**kwargs) as cur:
-                    yield cur
+                    yield cur  # type: ignore
 
     async def commit(self):
         if not self._conn:

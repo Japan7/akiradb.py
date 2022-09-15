@@ -4,6 +4,7 @@ from types import NoneType, UnionType
 from typing import Any, Callable, Tuple, TypeVar, Union, get_args, get_origin
 
 import akiradb
+from akiradb.types.query import Query
 
 _T = TypeVar('_T')
 
@@ -34,19 +35,6 @@ def _get_cypher_property_type(field_type):
         return 'datetime'
     else:
         return 'string'
-
-
-def _get_cypher_value(value):
-    from akiradb.model.proxies import PropertyChangesRecorder
-    if isinstance(value, PropertyChangesRecorder):
-        value = value.value
-
-    if value is None:
-        return "null"
-    elif isinstance(value, datetime):
-        return value
-    else:
-        return repr(value)
 
 
 def _parse_cypher_properties(properties: dict[str, Any],

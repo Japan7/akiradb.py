@@ -1,5 +1,6 @@
 from decimal import Decimal
 from datetime import datetime
+import re
 from psycopg.adapt import Dumper, PyFormat, RecursiveDumper
 from psycopg.pq import Format
 from psycopg.adapt import AdaptersMap
@@ -40,6 +41,9 @@ class DatetimeDumper(Dumper):
         return repr(int(obj.timestamp()*1000)).encode('utf-8')
 
 
+forbidden_chars = re.compile('[^a-zA-Z0-9_]')
+
+
 class DictDumper(RecursiveDumper):
     format = Format.TEXT
 
@@ -53,7 +57,8 @@ class DictDumper(RecursiveDumper):
         for (key, value) in obj.items():
             if not first:
                 res += b','
-            res += key.encode('utf-8') + b':' + self._tx.get_dumper(value, format).quote(value)
+            res += (forbidden_chars.sub('_', key).encode('utf-8') + b':'
+                    + self._tx.get_dumper(value, format).quote(value))
             first = False
         return b'{' + res + b'}'
 

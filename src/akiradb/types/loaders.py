@@ -11,7 +11,6 @@ class StringLoader(Loader):
     format = Format.BINARY
 
     def load(self, data: memoryview) -> Optional[str]:
-        print('Hello ' + repr(data))
         res = bytes(data).decode('utf-8')
         if res == '  cypher.null':
             return None
@@ -23,7 +22,6 @@ class IntLoader(Loader):
     format = Format.BINARY
 
     def load(self, data: memoryview) -> int:
-        print(repr(memoryview))
         return int.from_bytes(data, byteorder='big', signed=True)
 
 

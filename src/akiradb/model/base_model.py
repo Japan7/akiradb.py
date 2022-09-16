@@ -11,7 +11,7 @@ from akiradb.model.conditions import Condition, PropertyCondition
 from akiradb.model.proxies import PropertyChangesRecorder, PropertyChangesRecorderDescriptor
 from akiradb.model.utils import (__dataclass_transform__, _get_cypher_property_type,
                                  _parse_cypher_properties)
-from akiradb.types.query import Params, Query
+from akiradb.types.query import Label, Params, Query
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation
@@ -105,29 +105,38 @@ class BaseModel(metaclass=MetaModel):
         supertypes = [type.__qualname__ for type in cls.__bases__ if type is not BaseModel]
         async with cls._database_connection.cursor() as cursor:
             if supertypes:
-                await cursor.execute(
-                    'create vertex type %(type_name)s if not exists extends %(supertypes)s;',
-                    {'type_name': cls.__qualname__, 'supertypes': ','.join(supertypes)}
+                supertypes_query = []
+                params = {'type_name': Label(cls.__qualname__)}
+                i = 0
+                for supertype in supertypes:
+                    supertype_index = cast(Query, f'supertype{i}')
+                    supertypes_query.append('%(' + supertype_index + ')s')
+                    params[supertype_index] = Label(supertype)
+                    i += 1
+                await cursor.execute_sql(
+                    'create vertex type %(type_name)s if not exists extends '
+                    + ','.join(supertypes_query),
+                    params
                 )
             else:
-                await cursor.execute(
-                    'create vertex type %(type_name)s if not exists;',
-                    {'type_name': cls.__qualname__}
+                await cursor.execute_sql(
+                    'create vertex type %(type_name)s if not exists',
+                    {'type_name': Label(cls.__qualname__)}
                 )
             for field in fields(cls):
                 if field.name in cls._properties_names and field.name in cls.__annotations__:
-                    await cursor.execute(
-                        'create property %(property_name)s if not exists %(property_type)s;',
+                    await cursor.execute_sql(
+                        'create property %(property_name)s if not exists %(property_type)s',
                         {
-                            'property_name': f'{cls.__qualname__}.{field.name}',
-                            'property_type': _get_cypher_property_type(field.type)
+                            'property_name': Label(f'{cls.__qualname__}.{field.name}'),
+                            'property_type': Label(_get_cypher_property_type(field.type))
                         }
                     )
                     if field.default is not MISSING:
-                        await cursor.execute(
-                            'alter property %(property_name)s default %(default_value)s;',
+                        await cursor.execute_sql(
+                            'alter property %(property_name)s default %(default_value)s',
                             {
-                                'property_name': f'{cls.__qualname__}.{field.name}',
+                                'property_name': Label(f'{cls.__qualname__}.{field.name}'),
                                 'default_value': field.default
                             }
                         )
@@ -166,16 +175,16 @@ class BaseModel(metaclass=MetaModel):
                 'merge (n:%(type_name)s %(cypher_identifying)s) set n = %(cypher_properties)s '
                 + 'return id(n)',
                 {
-                    'type_name': self.__class__.__qualname__,
+                    'type_name': Label(self.__class__.__qualname__),
                     'cypher_identifying': identifying_properties,
                     'cypher_properties': self._properties
                 }
             )
         else:
             return (
-                'create (n:%(type_name)s %(cypher_identifying)s) return id(n)',
+                'create (n:%(type_name)s %(cypher_properties)s) return id(n)',
                 {
-                    'type_name': self.__class__.__qualname__,
+                    'type_name': Label(self.__class__.__qualname__),
                     'cypher_properties': self._properties
                 }
             )
@@ -183,21 +192,21 @@ class BaseModel(metaclass=MetaModel):
     def _get_delete_request(self) -> tuple[Query, Params]:
         return (
             'match (n:%(type_name)s) where id(n) = %(node_id)s detach delete n',
-            {'type_name': self.__class__.__qualname__, 'node_id': self._rid}
+            {'type_name': Label(self.__class__.__qualname__), 'node_id': self._rid}
         )
 
     @classmethod
     def _get_fetch_request(cls, rid: str | None = None,
                            condition: Condition | bool | None = None) -> tuple[Query, Params]:
         req = 'match (n:%(type_name)s) '
-        params = {'type_name': cls.__qualname__}
+        params: dict[str, Any] = {'type_name': Label(cls.__qualname__)}
         if condition is not None:
             if isinstance(condition, Condition):
                 rc, pc = condition._query()
                 req += 'where ' + rc + ' '
                 params.update(pc)
         if rid is not None:
-            req += 'where %(node_id)s '
+            req += 'where id(n) = %(node_id)s '
             params['node_id'] = rid
         req += 'return n'
         return (req, params)
@@ -291,7 +300,7 @@ class BaseModel(metaclass=MetaModel):
             joined_query: Query = ','.join(queries)
             await cursor.execute_cypher(
                 'match (n:%(type_name)s) where id(n) = %(node_id)s set ' + joined_query,
-                dict(**params, type_name = self.__class__.__qualname__, node_id = self._rid)
+                dict(**params, type_name = Label(self.__class__.__qualname__), node_id = self._rid)
             )
         return coroutine
 
@@ -329,7 +338,7 @@ class BaseModel(metaclass=MetaModel):
         async with self._database_connection.cursor(row_factory=dict_row) as cursor:
             await cursor.execute_cypher(
                 'match (n:%(type_name)s) where id(n) = %(node_id)s return n',
-                {'type_name': self.__class__.__qualname__, 'node_id': self._rid}
+                {'type_name': Label(self.__class__.__qualname__), 'node_id': self._rid}
             )
             async for row in cursor:
                 if row is None:

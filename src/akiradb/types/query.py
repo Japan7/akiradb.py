@@ -9,3 +9,8 @@ else:
 
 Query = LiteralString
 Params = Mapping[str, Any]
+
+
+class Label():
+    def __init__(self, label_name):
+        self.label_name = label_name

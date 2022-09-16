@@ -5,9 +5,11 @@ from functools import partial
 from typing import ClassVar, ForwardRef, Generic, Type, TypeVar, Union, cast
 
 from psycopg.rows import dict_row
+from akiradb.database_connection import AkiraAsyncClientCursor
 
 from akiradb.model.base_model import BaseModel, MetaModel
-from akiradb.model.utils import __dataclass_transform__, _get_cypher_value
+from akiradb.model.utils import __dataclass_transform__
+from akiradb.types.query import Label, Params, Query
 
 TModel = TypeVar('TModel', bound=BaseModel)
 
@@ -24,35 +26,62 @@ class Relation(Generic[TModel]):
 
     def _link(self, source: BaseModel, target: BaseModel,
               properties: Union['Properties', None] = None):
-        async def coroutine(cursor):
-            req = (f"{{cypher}} match (s), (t) "
-                   f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
-                   f"create (s)-[:{self._name} {{"
-                   f"{properties._to_cypher() if properties else ''}"
-                   f"}}]->(t);")
-            await cursor.execute(req)
+        async def coroutine(cursor: AkiraAsyncClientCursor):
+            if properties:
+                await cursor.execute_cypher(
+                    'match (s), (t) where id(s)=%(s_rid)s and id(t)=%(t_rid)s '
+                    + 'create (s)-[:%(rel_type_name)s %(properties)s]->(t)',
+                    {
+                        'rel_type_name': Label(self._name), 's_rid': source._rid,
+                        't_rid': target._rid, 'properties': asdict(properties)
+                    }
+                )
+            else:
+                await cursor.execute_cypher(
+                    'match (s), (t) where id(s)=%(s_rid)s and id(t)=%(t_rid)s '
+                    + 'create (s)-[:%(rel_type_name)s]->(t)',
+                    {
+                        'rel_type_name': Label(self._name), 's_rid': source._rid,
+                        't_rid': target._rid
+                    }
+                )
         return coroutine
 
     def _unlink(self, source: BaseModel, target: BaseModel):
-        async def coroutine(cursor):
-            req = (f"{{cypher}} match (s)-[r:{self._name}]->(t) "
-                   f"where id(s)='{source._rid}' and id(t)='{target._rid}' "
-                   f"delete r;")
-            await cursor.execute(req)
+        async def coroutine(cursor: AkiraAsyncClientCursor):
+            await cursor.execute_cypher(
+                'match (s)-[r:%(rel_type_name)s]->(t) where id(s)=%(s_rid)s and id(t)=%(t_rid)s '
+                + 'delete r',
+                {'rel_type_name': Label(self._name), 's_rid': source._rid, 't_rid': target._rid}
+            )
         return coroutine
 
-    def _get_target_match_request(self, target_cls, properties_cls=None):
+    def _get_target_match_request(self, target_cls, properties_cls=None) -> tuple[Query, Params]:
         assert self._source
-        target_cls_properties = ['id(n2)', 'labels(n2)'] + \
-                                ['n2.' + property_name
-                                 for property_name in target_cls._properties_names]
-        if properties_cls:
-            target_cls_properties += ['r.' + property.name for property in fields(properties_cls)]
+        query = ('match (n1:%(n1_type_name)s) -[r:%(rel_type_name)s]-> (n2:%(n2_type_name)s) '
+                 + 'where id(n1) = %(n1_rid)s return id(n2),labels(n2),')
+        params = {
+            'n1_type_name': Label(self._source.__class__.__qualname__),
+            'rel_type_name': Label(self._name), 'n2_type_name': Label(target_cls.__qualname__),
+            'n1_rid': self._source._rid
+        }
 
-        return (f'{{cypher}} match (n1: {self._source.__class__.__qualname__}) '
-                f'-[r:{self._name}]-> (n2: {target_cls.__qualname__}) '
-                f'where id(n1) = "{self._source._rid}" '
-                f'return {",".join(target_cls_properties)};')
+        i = 0
+        properties_query = []
+        for property_name in target_cls._properties_names:
+            property_id = cast(Query, f'property{i}')
+            properties_query.append('%(' + property_id + ')s')
+            params[property_id] = Label('n2.' + property_name)
+            i += 1
+
+        if properties_cls:
+            for property in fields(properties_cls):
+                property_id = cast(Query, f'property{i}')
+                properties_query.append('%(' + property_id + ')s')
+                params[property_id] = Label('r.' + property.name)
+                i += 1
+
+        return query + ','.join(properties_query), params
 
 
 TRelation = TypeVar('TRelation', bound=Relation)
@@ -95,7 +124,7 @@ class Many(Relation[TModel]):
             self._elements = []
             req = self._get_target_match_request(target_cls)
             async with self._source._database_connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(req)
+                await cursor.execute_cypher(*req)
                 async for row in cursor:
                     parameters = {name[3:]: value for (name, value) in row.items()
                                   if name.startswith('n2.') and value is not None
@@ -147,7 +176,7 @@ class One(Relation[TModel]):
             self._element = None
             req = self._get_target_match_request(target_cls)
             async with self._source._database_connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(req)
+                await cursor.execute_cypher(*req)
                 row = await cursor.fetchone()
                 if row:
                     parameters = {name[3:]: value for (name, value) in row.items()
@@ -182,10 +211,6 @@ class MetaProperties(type):
 
 class Properties(metaclass=MetaProperties):
     _properties_names: ClassVar[list[str]]
-
-    def _to_cypher(self):
-        return ",".join(f"{index}: {_get_cypher_value(value)}"
-                        for index, value in asdict(self).items())
 
 
 TProperties = TypeVar('TProperties', bound=Properties)
@@ -244,7 +269,7 @@ class ManyWithProperties(Many[TModel], Generic[TModel, TProperties]):
             self._properties = []
             req = self._get_target_match_request(target_cls, properties_cls=properties_cls)
             async with self._source._database_connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(req)
+                await cursor.execute_cypher(*req)
                 async for row in cursor:
                     parameters = {name[3:]: value for (name, value) in row.items()
                                   if name.startswith('n2.') and value is not None
@@ -317,7 +342,7 @@ class OneWithProperties(One[TModel], Generic[TModel, TProperties]):
             self._properties = None
             req = self._get_target_match_request(target_cls, properties_cls=properties_cls)
             async with self._source._database_connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(req)
+                await cursor.execute_cypher(*req)
                 row = await cursor.fetchone()
                 if row:
                     parameters = {name[3:]: value for (name, value) in row.items()

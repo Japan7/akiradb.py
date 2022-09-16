@@ -1,6 +1,6 @@
 from asyncio import Lock
 import contextlib
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional, cast
 
 import psycopg
 from akiradb.exceptions import AkiraNotConnectedException
@@ -9,13 +9,12 @@ from akiradb.types.query import Params, Query
 
 
 class AkiraAsyncClientCursor(psycopg.AsyncClientCursor):
-    async def execute(self: psycopg.AsyncClientCursor._Self, query: Query,
-                      params: Params = None) -> psycopg.AsyncClientCursor._Self:
-        await super().execute(query, params)
-        return self
+    async def execute_sql(self: psycopg.AsyncClientCursor._Self, query: Query,
+                          params: Optional[Params] = None) -> psycopg.AsyncClientCursor._Self:
+        return await self.execute(f'{query};', params)
 
     async def execute_cypher(self: psycopg.AsyncClientCursor._Self, query: Query,
-                             params: Params = None) -> psycopg.AsyncClientCursor._Self:
+                             params: Optional[Params] = None) -> psycopg.AsyncClientCursor._Self:
         return await self.execute(f'{{cypher}} {query};', params)
 
 
@@ -65,7 +64,7 @@ class DatabaseConnection():
         async with self._conn_transaction_lock:
             async with self._conn.transaction():
                 async with self._conn.cursor(**kwargs) as cur:
-                    yield cur  # type: ignore
+                    yield cast(AkiraAsyncClientCursor, cur)
 
     async def commit(self):
         if not self._conn:

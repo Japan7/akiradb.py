@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from akiradb.types.query import Query, Params
+from akiradb.types.query import Label, Query, Params
 
 
 class Condition:
@@ -40,10 +40,11 @@ class Condition:
 
 class PropertyCondition(Condition):
     def __init__(self, property_name: str):
-        self.property_name: Query = cast(Query, property_name)
+        self.property_name = property_name
 
-    def _query(self, _: int = 0) -> tuple[Query, Params]:
-        return ('n.' + self.property_name, {})
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        value_name = cast(Query, f'value{value_id}')
+        return ('%(' + value_name + ')s', {value_name: Label('n.' + self.property_name)})
 
 
 class ValueCondition(Condition):
@@ -74,63 +75,63 @@ class BinaryCondition(Condition):
 
 
 class Equals(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return (q1 + ' = ' + q2, dict(**p1, **p2))
 
 
 class NotEquals(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return (q1 + ' <> ' + q2, dict(**p1, **p2))
 
 
 class LowerThan(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return (q1 + ' < ' + q2, dict(**p1, **p2))
 
 
 class LowerEquals(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return (q1 + ' <= ' + q2, dict(**p1, **p2))
 
 
 class GreaterThan(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return (q1 + ' > ' + q2, dict(**p1, **p2))
 
 
 class GreaterEquals(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return (q1 + ' >= ' + q2, dict(**p1, **p2))
 
 
 class And(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return ('(' + q1 + ') and (' + q2 + ')', dict(**p1, **p2))
 
 
 class Or(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return ('(' + q1 + ') or (' + q2 + ')', dict(**p1, **p2))
 
 
 class Xor(BinaryCondition):
-    def _query(self) -> tuple[Query, Params]:
-        q1, p1 = self.condition1._query()
-        q2, p2 = self.condition2._query(len(p1))
+    def _query(self, value_id: int = 0) -> tuple[Query, Params]:
+        q1, p1 = self.condition1._query(value_id)
+        q2, p2 = self.condition2._query(value_id + len(p1))
         return ('(' + q1 + ') xor (' + q2 + ')', dict(**p1, **p2))

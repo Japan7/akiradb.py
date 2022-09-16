@@ -40,15 +40,7 @@ def _get_cypher_property_type(field_type):
 def _parse_cypher_properties(properties: dict[str, Any],
                              model_cls: 'akiradb.model.base_model.MetaModel'):
     for model_field in fields(model_cls):
-        if model_field.name in model_cls._properties_names:
-            if model_field.name in properties:
-                parsed_value = properties[model_field.name]
-
-                if parsed_value == '  cypher.null':
-                    parsed_value = None
-
-                properties[model_field.name] = parsed_value
-            else:
-                properties[model_field.name] = None
+        if model_field.name in model_cls._properties_names and model_field.name not in properties:
+            properties[model_field.name] = None
 
     return model_cls(**properties)

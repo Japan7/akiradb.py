@@ -1,7 +1,7 @@
 import struct
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from psycopg import postgres
 from psycopg.adapt import AdaptersMap, Loader
 from psycopg.pq import Format
@@ -10,7 +10,7 @@ from psycopg.pq import Format
 class StringLoader(Loader):
     format = Format.BINARY
 
-    def load(self, data: memoryview) -> Optional[str]:
+    def load(self, data: Union[bytes, bytearray, memoryview]) -> Optional[str]:
         res = bytes(data).decode('utf-8')
         if res == '  cypher.null':
             return None
@@ -21,28 +21,28 @@ class StringLoader(Loader):
 class IntLoader(Loader):
     format = Format.BINARY
 
-    def load(self, data: memoryview) -> int:
+    def load(self, data: Union[bytes, bytearray, memoryview]) -> int:
         return int.from_bytes(data, byteorder='big', signed=True)
 
 
 class BoolLoader(Loader):
     format = Format.BINARY
 
-    def load(self, data: memoryview) -> bool:
+    def load(self, data: Union[bytes, bytearray, memoryview]) -> bool:
         return False if data == b'\x00' else True
 
 
 class FloatLoader(Loader):
     format = Format.BINARY
 
-    def load(self, data: memoryview) -> float:
+    def load(self, data: Union[bytes, bytearray, memoryview]) -> float:
         return struct.unpack('>d', data)[0]
 
 
 class DatetimeLoader(Loader):
     format = Format.BINARY
 
-    def load(self, data: memoryview) -> datetime:
+    def load(self, data: Union[bytes, bytearray, memoryview]) -> datetime:
         return datetime.fromtimestamp(int.from_bytes(data, byteorder='big', signed=True) / 1000)
 
 

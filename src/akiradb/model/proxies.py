@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from akiradb.types.query import Params, Query
+from akiradb.types.query import Label, Params, Query
 
 
 class Change():
@@ -15,7 +15,11 @@ class NewValue(Change):
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
         value_name = cast(Query, f'value{value_id}')
-        return 'n.' + self.property_name + ' = %(' + value_name + ')', {value_name: self.new_value}
+        property_name = cast(Query, f'property{value_id}')
+        return (
+            '%(' + property_name + ')s' + ' = %(' + value_name + ')s',
+            {property_name: Label('n.' + self.property_name), value_name: self.new_value}
+        )
 
 
 class Addition(Change):
@@ -25,10 +29,16 @@ class Addition(Change):
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
         value_name = cast(Query, f'value{value_id}')
+        property_name = cast(Query, f'property{value_id}')
+        pproperty_name = cast(Query, f'pproperty{value_id}')
         return (
-            'n.' + self.property_name + ' = n.' + self.property_name
-            + ' + %(' + value_name + ')',
-            {value_name: self.add_value}
+            '%(' + property_name + ')s = %(' + pproperty_name + ')s'
+            + ' + %(' + value_name + ')s',
+            {
+                property_name: Label('n.' + self.property_name),
+                pproperty_name: Label('n.' + self.property_name),
+                value_name: self.add_value
+            }
         )
 
 
@@ -39,10 +49,16 @@ class Substraction(Change):
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
         value_name = cast(Query, f'value{value_id}')
+        property_name = cast(Query, f'property{value_id}')
+        pproperty_name = cast(Query, f'pproperty{value_id}')
         return (
-            'n.' + self.property_name + ' = n.' + self.property_name
-            + ' - %(' + value_name + ')',
-            {value_name: self.sub_value}
+            '%(' + property_name + ')s = %(' + pproperty_name + ')s'
+            + ' - %(' + value_name + ')s',
+            {
+                property_name: Label('n.' + self.property_name),
+                pproperty_name: Label('n.' + self.property_name),
+                value_name: self.sub_value
+            }
         )
 
 
@@ -53,10 +69,16 @@ class Multiplication(Change):
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
         value_name = cast(Query, f'value{value_id}')
+        property_name = cast(Query, f'property{value_id}')
+        pproperty_name = cast(Query, f'pproperty{value_id}')
         return (
-            'n.' + self.property_name + ' = n.' + self.property_name
-            + ' * %(' + value_name + ')',
-            {value_name: self.mult_value}
+            '%(' + property_name + ')s = %(' + pproperty_name + ')s'
+            + ' * %(' + value_name + ')s',
+            {
+                property_name: Label('n.' + self.property_name),
+                pproperty_name: Label('n.' + self.property_name),
+                value_name: self.mult_value
+            }
         )
 
 

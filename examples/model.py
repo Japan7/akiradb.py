@@ -1,6 +1,5 @@
 import asyncio
 from datetime import date, datetime, timedelta
-from psycopg.rows import dict_row
 from typing import Optional
 
 from akiradb.database_connection import DatabaseConnection

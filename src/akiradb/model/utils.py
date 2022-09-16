@@ -1,10 +1,9 @@
 from dataclasses import fields
-from datetime import date, datetime
+from datetime import datetime
 from types import NoneType, UnionType
 from typing import Any, Callable, Tuple, TypeVar, Union, get_args, get_origin
 
 import akiradb
-from akiradb.types.query import Query
 
 _T = TypeVar('_T')
 

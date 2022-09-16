@@ -12,5 +12,5 @@ Params = Mapping[str, Any]
 
 
 class Label():
-    def __init__(self, label_name):
+    def __init__(self, label_name: str):
         self.label_name = label_name

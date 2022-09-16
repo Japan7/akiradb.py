@@ -69,23 +69,19 @@ class DictDumper(RecursiveDumper):
     format = Format.TEXT
 
     def dump(self, _: dict) -> bytes:
-        return '{}'.encode('utf-8')
+        raise NotImplementedError()
 
     def quote(self, obj: dict) -> bytes:
         from akiradb.model.proxies import PropertyChangesRecorder
 
         format = PyFormat.from_pq(self.format)
-        res = b''
-        first = True
-        for (key, value) in obj.items():
-            if not first:
-                res += b','
-            if isinstance(value, PropertyChangesRecorder):
-                value = value.value
-            res += (forbidden_chars.sub('_', key).encode('utf-8') + b':'
-                    + self._tx.get_dumper(value, format).quote(value))
-            first = False
-        return b'{' + res + b'}'
+        get_value = lambda val: val.value if isinstance(val, PropertyChangesRecorder) else val
+
+        res = (forbidden_chars.sub('_', key).encode('utf-8') + b':'
+               + self._tx.get_dumper((val := get_value(value)), format).quote(val)
+               for key, value in obj.items())
+
+        return b'{' + b','.join(res) + b'}'
 
 
 def register_dumpers(adapters: AdaptersMap):
@@ -95,4 +91,4 @@ def register_dumpers(adapters: AdaptersMap):
     adapters.register_dumper(bool, BoolDumper)
     adapters.register_dumper(float, FloatDumper)
     adapters.register_dumper(dict, DictDumper)
-    adapters.register_dumper('datetime.datetime', DatetimeDumper)
+    adapters.register_dumper(datetime, DatetimeDumper)

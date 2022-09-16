@@ -10,21 +10,21 @@ class Change():
 
 class NewValue(Change):
     def __init__(self, property_name: str, new_value: Any):
-        self.property_name: Query = cast(Query, property_name)
+        self.property_name = property_name
         self.new_value = new_value
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
         value_name = cast(Query, f'value{value_id}')
         property_name = cast(Query, f'property{value_id}')
         return (
-            '%(' + property_name + ')s' + ' = %(' + value_name + ')s',
+            '%(' + property_name + ')s = %(' + value_name + ')s',
             {property_name: Label('n.' + self.property_name), value_name: self.new_value}
         )
 
 
 class Addition(Change):
     def __init__(self, property_name: str, add_value: Any):
-        self.property_name: Query = cast(Query, property_name)
+        self.property_name = property_name
         self.add_value = add_value
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
@@ -32,8 +32,7 @@ class Addition(Change):
         property_name = cast(Query, f'property{value_id}')
         pproperty_name = cast(Query, f'pproperty{value_id}')
         return (
-            '%(' + property_name + ')s = %(' + pproperty_name + ')s'
-            + ' + %(' + value_name + ')s',
+            '%(' + property_name + ')s = %(' + pproperty_name + ')s + %(' + value_name + ')s',
             {
                 property_name: Label('n.' + self.property_name),
                 pproperty_name: Label('n.' + self.property_name),
@@ -44,7 +43,7 @@ class Addition(Change):
 
 class Substraction(Change):
     def __init__(self, property_name: str, sub_value: Any):
-        self.property_name: Query = cast(Query, property_name)
+        self.property_name = property_name
         self.sub_value = sub_value
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
@@ -52,8 +51,7 @@ class Substraction(Change):
         property_name = cast(Query, f'property{value_id}')
         pproperty_name = cast(Query, f'pproperty{value_id}')
         return (
-            '%(' + property_name + ')s = %(' + pproperty_name + ')s'
-            + ' - %(' + value_name + ')s',
+            '%(' + property_name + ')s = %(' + pproperty_name + ')s - %(' + value_name + ')s',
             {
                 property_name: Label('n.' + self.property_name),
                 pproperty_name: Label('n.' + self.property_name),
@@ -64,7 +62,7 @@ class Substraction(Change):
 
 class Multiplication(Change):
     def __init__(self, property_name: str, mult_value: Any):
-        self.property_name: Query = cast(Query, property_name)
+        self.property_name = property_name
         self.mult_value = mult_value
 
     def _query(self, value_id: int = 0) -> tuple[Query, Params]:
@@ -72,8 +70,7 @@ class Multiplication(Change):
         property_name = cast(Query, f'property{value_id}')
         pproperty_name = cast(Query, f'pproperty{value_id}')
         return (
-            '%(' + property_name + ')s = %(' + pproperty_name + ')s'
-            + ' * %(' + value_name + ')s',
+            '%(' + property_name + ')s = %(' + pproperty_name + ')s * %(' + value_name + ')s',
             {
                 property_name: Label('n.' + self.property_name),
                 pproperty_name: Label('n.' + self.property_name),

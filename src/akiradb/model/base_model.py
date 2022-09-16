@@ -173,7 +173,7 @@ class BaseModel(metaclass=MetaModel):
         if identifying_properties:
             return (
                 'merge (n:%(type_name)s %(cypher_identifying)s) set n = %(cypher_properties)s '
-                + 'return id(n)',
+                'return id(n)',
                 {
                     'type_name': Label(self.__class__.__qualname__),
                     'cypher_identifying': identifying_properties,
@@ -200,14 +200,17 @@ class BaseModel(metaclass=MetaModel):
                            condition: Condition | bool | None = None) -> tuple[Query, Params]:
         req = 'match (n:%(type_name)s) '
         params: dict[str, Any] = {'type_name': Label(cls.__qualname__)}
+
         if condition is not None:
-            if isinstance(condition, Condition):
-                rc, pc = condition._query()
-                req += 'where ' + rc + ' '
-                params.update(pc)
+            assert isinstance(condition, Condition)
+            rc, pc = condition._query()
+            req += 'where ' + rc + ' '
+            params.update(pc)
+
         if rid is not None:
             req += 'where id(n) = %(node_id)s '
             params['node_id'] = rid
+
         req += 'return n'
         return (req, params)
 
@@ -291,16 +294,18 @@ class BaseModel(metaclass=MetaModel):
 
     def _save_property_changes(self, property_recorder: PropertyChangesRecorder):
         async def coroutine(cursor: AkiraAsyncClientCursor):
-            queries = []
+            queries: list[Query] = []
             params = {}
+
             for i, change in enumerate(property_recorder.changes):
                 q, p = change._query(i)
                 queries.append(q)
                 params.update(p)
-            joined_query: Query = ','.join(queries)
+
+            joined_query = ','.join(queries)
             await cursor.execute_cypher(
                 'match (n:%(type_name)s) where id(n) = %(node_id)s set ' + joined_query,
-                dict(**params, type_name = Label(self.__class__.__qualname__), node_id = self._rid)
+                dict(**params, type_name=Label(self.__class__.__qualname__), node_id=self._rid)
             )
         return coroutine
 

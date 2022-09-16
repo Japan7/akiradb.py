@@ -30,18 +30,21 @@ class Relation(Generic[TModel]):
             if properties:
                 await cursor.execute_cypher(
                     'match (s), (t) where id(s)=%(s_rid)s and id(t)=%(t_rid)s '
-                    + 'create (s)-[:%(rel_type_name)s %(properties)s]->(t)',
+                    'create (s)-[:%(rel_type_name)s %(properties)s]->(t)',
                     {
-                        'rel_type_name': Label(self._name), 's_rid': source._rid,
-                        't_rid': target._rid, 'properties': asdict(properties)
+                        'rel_type_name': Label(self._name),
+                        's_rid': source._rid,
+                        't_rid': target._rid,
+                        'properties': asdict(properties)
                     }
                 )
             else:
                 await cursor.execute_cypher(
                     'match (s), (t) where id(s)=%(s_rid)s and id(t)=%(t_rid)s '
-                    + 'create (s)-[:%(rel_type_name)s]->(t)',
+                    'create (s)-[:%(rel_type_name)s]->(t)',
                     {
-                        'rel_type_name': Label(self._name), 's_rid': source._rid,
+                        'rel_type_name': Label(self._name),
+                        's_rid': source._rid,
                         't_rid': target._rid
                     }
                 )
@@ -51,7 +54,7 @@ class Relation(Generic[TModel]):
         async def coroutine(cursor: AkiraAsyncClientCursor):
             await cursor.execute_cypher(
                 'match (s)-[r:%(rel_type_name)s]->(t) where id(s)=%(s_rid)s and id(t)=%(t_rid)s '
-                + 'delete r',
+                'delete r',
                 {'rel_type_name': Label(self._name), 's_rid': source._rid, 't_rid': target._rid}
             )
         return coroutine
@@ -62,7 +65,8 @@ class Relation(Generic[TModel]):
                  + 'where id(n1) = %(n1_rid)s return id(n2),labels(n2),')
         params = {
             'n1_type_name': Label(self._source.__class__.__qualname__),
-            'rel_type_name': Label(self._name), 'n2_type_name': Label(target_cls.__qualname__),
+            'rel_type_name': Label(self._name),
+            'n2_type_name': Label(target_cls.__qualname__),
             'n1_rid': self._source._rid
         }
 

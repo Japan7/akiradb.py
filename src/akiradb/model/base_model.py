@@ -4,13 +4,14 @@ from typing import TYPE_CHECKING, Any, ClassVar, ParamSpec, Type, TypeVar, cast
 
 from psycopg.rows import dict_row
 
-from akiradb.database_connection import DatabaseConnection
+from akiradb.database_connection import AkiraAsyncClientCursor, DatabaseConnection
 from akiradb.exceptions import (AkiraNodeNotFoundException,
                                 AkiraNodeTypeAlreadyDefinedException, AkiraUnknownNodeException)
 from akiradb.model.conditions import Condition, PropertyCondition
 from akiradb.model.proxies import PropertyChangesRecorder, PropertyChangesRecorderDescriptor
-from akiradb.model.utils import (__dataclass_transform__,
-                                 _get_cypher_property_type, _get_cypher_value)
+from akiradb.model.utils import (__dataclass_transform__, _get_cypher_property_type,
+                                 _parse_cypher_properties)
+from akiradb.types.query import Label, Params, Query
 
 if TYPE_CHECKING:
     from akiradb.model.relations import Relation
@@ -103,25 +104,49 @@ class BaseModel(metaclass=MetaModel):
         await cls._database_connection.connect()
         supertypes = [type.__qualname__ for type in cls.__bases__ if type is not BaseModel]
         async with cls._database_connection.cursor() as cursor:
-            req = (f'create vertex type {cls.__qualname__} if not exists '
-                   f'{("extends " + ",".join(supertypes)) if supertypes else ""};')
-            await cursor.execute(req)
+            if supertypes:
+                supertypes_query = []
+                params = {'type_name': Label(cls.__qualname__)}
+                i = 0
+                for supertype in supertypes:
+                    supertype_index = cast(Query, f'supertype{i}')
+                    supertypes_query.append('%(' + supertype_index + ')s')
+                    params[supertype_index] = Label(supertype)
+                    i += 1
+                await cursor.execute_sql(
+                    'create vertex type %(type_name)s if not exists extends '
+                    + ','.join(supertypes_query),
+                    params
+                )
+            else:
+                await cursor.execute_sql(
+                    'create vertex type %(type_name)s if not exists',
+                    {'type_name': Label(cls.__qualname__)}
+                )
             for field in fields(cls):
                 if field.name in cls._properties_names and field.name in cls.__annotations__:
-                    req = (f'create property {cls.__qualname__}.{field.name} if not exists '
-                           f'{_get_cypher_property_type(field.type)};')
-                    await cursor.execute(req)
+                    await cursor.execute_sql(
+                        'create property %(property_name)s if not exists %(property_type)s',
+                        {
+                            'property_name': Label(f'{cls.__qualname__}.{field.name}'),
+                            'property_type': Label(_get_cypher_property_type(field.type))
+                        }
+                    )
                     if field.default is not MISSING:
-                        req = (f'alter property {cls.__qualname__}.{field.name} '
-                               f'default {_get_cypher_value(field.default)};')
-                        await cursor.execute(req)
+                        await cursor.execute_sql(
+                            'alter property %(property_name)s default %(default_value)s',
+                            {
+                                'property_name': Label(f'{cls.__qualname__}.{field.name}'),
+                                'default_value': field.default
+                            }
+                        )
         await cls._database_connection.close()
 
     @classmethod
     async def bulk_create(cls: Type[TModel], nodes: list[TModel]):
         async with cls._database_connection.cursor() as cursor:
             for node in nodes:
-                await cursor.execute(node._get_create_request())
+                await cursor.execute_cypher(*node._get_create_request())
                 async for row in cursor:
                     assert row is not None
                     node._rid, = row
@@ -130,8 +155,8 @@ class BaseModel(metaclass=MetaModel):
     async def bulk_upsert(cls: Type[TModel], nodes: list[tuple[TModel, dict[str, Any]]]):
         async with cls._database_connection.cursor() as cursor:
             for node, identifying_properties in nodes:
-                await cursor.execute(
-                    node._get_create_request(identifying_properties=identifying_properties)
+                await cursor.execute_cypher(
+                    *node._get_create_request(identifying_properties=identifying_properties)
                 )
                 async for row in cursor:
                     assert row is not None
@@ -141,36 +166,57 @@ class BaseModel(metaclass=MetaModel):
     async def bulk_delete(cls: Type[TModel], nodes: list[TModel]):
         async with cls._database_connection.cursor() as cursor:
             for node in nodes:
-                await cursor.execute(node._get_delete_request())
+                await cursor.execute_cypher(*node._get_delete_request())
 
-    def _get_create_request(self, identifying_properties: dict[str, Any] | None = None) -> str:
-        req = '{cypher} '
+    def _get_create_request(self, identifying_properties: dict[str, Any] | None = None
+                            ) -> tuple[Query, Params]:
         if identifying_properties:
-            req += (f'merge (n:{self.__class__.__qualname__} '
-                    f'{{{ self._transform_properties_to_cypher(identifying_properties) }}}) '
-                    f'set n = {{{ self._transform_properties_to_cypher(self._properties) }}}')
+            return (
+                'merge (n:%(type_name)s %(cypher_identifying)s) set n = %(cypher_properties)s '
+                'return id(n)',
+                {
+                    'type_name': Label(self.__class__.__qualname__),
+                    'cypher_identifying': identifying_properties,
+                    'cypher_properties': self._properties
+                }
+            )
         else:
-            req += (f'create (n:{self.__class__.__qualname__} '
-                    f'{{{ self._transform_properties_to_cypher(self._properties) }}})')
-        return req + ' return id(n);'
+            return (
+                'create (n:%(type_name)s %(cypher_properties)s) return id(n)',
+                {
+                    'type_name': Label(self.__class__.__qualname__),
+                    'cypher_properties': self._properties
+                }
+            )
 
-    def _get_delete_request(self) -> str:
-        return (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
-                f'where id(n) = {self._rid!r} detach delete n;')
+    def _get_delete_request(self) -> tuple[Query, Params]:
+        return (
+            'match (n:%(type_name)s) where id(n) = %(node_id)s detach delete n',
+            {'type_name': Label(self.__class__.__qualname__), 'node_id': self._rid}
+        )
 
     @classmethod
     def _get_fetch_request(cls, rid: str | None = None,
-                           condition: Condition | bool | None = None) -> str:
-        return (f'{{cypher}} match (n:{cls.__qualname__}) '
-                f'{("where " + str(condition)) if condition is not None else ""} '
-                f'{("where id(n) = " + repr(rid)) if rid is not None else ""} '
-                f'return n;')
+                           condition: Condition | bool | None = None) -> tuple[Query, Params]:
+        req = 'match (n:%(type_name)s) '
+        params: dict[str, Any] = {'type_name': Label(cls.__qualname__)}
+
+        if condition is not None:
+            assert isinstance(condition, Condition)
+            rc, pc = condition._query()
+            req += 'where ' + rc + ' '
+            params.update(pc)
+
+        if rid is not None:
+            req += 'where id(n) = %(node_id)s '
+            params['node_id'] = rid
+
+        req += 'return n'
+        return (req, params)
 
     async def create(self):
-        req = self._get_create_request()
-
         async with self._database_connection.cursor() as cursor:
-            await cursor.execute(req)
+            await cursor.execute_cypher(*self._get_create_request())
             row = await cursor.fetchone()
             assert row is not None
             self._rid, = row
@@ -178,10 +224,10 @@ class BaseModel(metaclass=MetaModel):
         return self
 
     async def upsert(self, **identifying_properties):
-        req = self._get_create_request(identifying_properties=identifying_properties)
-
         async with self._database_connection.cursor() as cursor:
-            await cursor.execute(req)
+            await cursor.execute_cypher(
+                *self._get_create_request(identifying_properties=identifying_properties)
+            )
             row = await cursor.fetchone()
             assert row is not None
             self._rid, = row
@@ -199,40 +245,29 @@ class BaseModel(metaclass=MetaModel):
             req = cls._get_fetch_request()
 
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
-            await cursor.execute(req)
+            await cursor.execute_cypher(*req)
             row = await cursor.fetchone()
             if not row:
                 raise AkiraNodeNotFoundException()
 
-            parameters = {name: value for (name, value) in row.items()
-                          if not name.startswith('@') and value is not None
-                          and value != '  cypher.null'}
-            inst_cls = MetaModel._models[row['@type']]
-            for property_name in inst_cls._properties_names:
-                if property_name not in parameters.keys():
-                    parameters[property_name] = None
-            instance = inst_cls(**parameters)
+            instance = _parse_cypher_properties({name: value for (name, value) in row.items()
+                                                 if not name.startswith('@')
+                                                 and value is not None},
+                                                MetaModel._models[row['@type']])
             instance._rid = row['@rid']
 
         return instance
 
     @classmethod
     async def fetch_many(cls: Type[TModel], condition: Condition | bool) -> list[TModel]:
-        req = cls._get_fetch_request(condition=condition)
-
         instances = []
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
-            await cursor.execute(req)
+            await cursor.execute_cypher(*cls._get_fetch_request(condition=condition))
             async for row in cursor:
-                parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@') and value is not None
-                              and value != '  cypher.null'}
-
-                inst_cls = MetaModel._models[row['@type']]
-                for property_name in inst_cls._properties_names:
-                    if property_name not in parameters.keys():
-                        parameters[property_name] = None
-                instance = inst_cls(**parameters)
+                instance = _parse_cypher_properties({name: value for (name, value) in row.items()
+                                                     if not name.startswith('@')
+                                                     and value is not None},
+                                                    MetaModel._models[row['@type']])
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -240,20 +275,14 @@ class BaseModel(metaclass=MetaModel):
 
     @classmethod
     async def fetch_all(cls: Type[TModel]) -> list[TModel]:
-        req = cls._get_fetch_request()
-
         instances = []
         async with cls._database_connection.cursor(row_factory=dict_row) as cursor:
-            await cursor.execute(req)
+            await cursor.execute_cypher(*cls._get_fetch_request())
             async for row in cursor:
-                parameters = {name: value for (name, value) in row.items()
-                              if not name.startswith('@') and value is not None
-                              and value != '  cypher.null'}
-                inst_cls = MetaModel._models[row['@type']]
-                for property_name in inst_cls._properties_names:
-                    if property_name not in parameters.keys():
-                        parameters[property_name] = None
-                instance = inst_cls(**parameters)
+                instance = _parse_cypher_properties({name: value for (name, value) in row.items()
+                                                     if not name.startswith('@')
+                                                     and value is not None},
+                                                    MetaModel._models[row['@type']])
                 instance._rid = row['@rid']
                 instances.append(instance)
 
@@ -264,11 +293,20 @@ class BaseModel(metaclass=MetaModel):
             self._operations_queue.append(operation)
 
     def _save_property_changes(self, property_recorder: PropertyChangesRecorder):
-        async def coroutine(cursor):
-            req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
-                   f'where id(n) = {self._rid!r} '
-                   f'set {",".join(map(str, property_recorder.changes))};')
-            await cursor.execute(req)
+        async def coroutine(cursor: AkiraAsyncClientCursor):
+            queries: list[Query] = []
+            params = {}
+
+            for i, change in enumerate(property_recorder.changes):
+                q, p = change._query(i)
+                queries.append(q)
+                params.update(p)
+
+            joined_query = ','.join(queries)
+            await cursor.execute_cypher(
+                'match (n:%(type_name)s) where id(n) = %(node_id)s set ' + joined_query,
+                dict(**params, type_name=Label(self.__class__.__qualname__), node_id=self._rid)
+            )
         return coroutine
 
     async def _save(self, cursor) -> None:
@@ -292,7 +330,7 @@ class BaseModel(metaclass=MetaModel):
 
     async def delete(self) -> None:
         async with self._database_connection.cursor() as cursor:
-            await cursor.execute(self._get_delete_request())
+            await cursor.execute_cypher(*self._get_delete_request())
 
     async def load(self) -> None:
         if not self._rid:
@@ -302,10 +340,11 @@ class BaseModel(metaclass=MetaModel):
             if self._operations_queue:
                 self._operations_queue = []
 
-        req = (f'{{cypher}} match (n:{self.__class__.__qualname__}) '
-               f'where id(n) = "{self._rid}" return n;')
         async with self._database_connection.cursor(row_factory=dict_row) as cursor:
-            await cursor.execute(req)
+            await cursor.execute_cypher(
+                'match (n:%(type_name)s) where id(n) = %(node_id)s return n',
+                {'type_name': Label(self.__class__.__qualname__), 'node_id': self._rid}
+            )
             async for row in cursor:
                 if row is None:
                     raise AkiraUnknownNodeException()
@@ -313,11 +352,6 @@ class BaseModel(metaclass=MetaModel):
                     for name, value in row.items():
                         if not name.startswith('@'):
                             setattr(self, name, value)
-
-    @staticmethod
-    def _transform_properties_to_cypher(properties: dict[str, Any]):
-        return ",".join(f"{index}: {_get_cypher_value(value)}"
-                        for index, value in properties.items())
 
     def _split_properties_and_relations(self):
         properties: dict[str, Any] = {}

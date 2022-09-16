@@ -23,6 +23,8 @@ class Person(Model):
     name: Optional[str]
     today: datetime = datetime(year=1970, month=1, day=1)
     married: bool = False
+    testi: int = 0
+    test: float = 0.0
 
     spouses = relation('married_to',
                        ManyWithProperties["Person", SinceProperties],
@@ -30,7 +32,7 @@ class Person(Model):
 
 
 class BetterPerson(Person):
-    birthday: date = date(year=1970, month=1, day=1)
+    birthday: date = datetime(year=1970, month=1, day=1)
     better_name: str = "Hello World"
     age: int = 0
 
@@ -92,7 +94,8 @@ async def main():
                                                  & (Person.married == True))
     for married_nana_chan in married_nana_chans:
         married_nana_chan.married = False
-        married_nana_chan.name += '-senpai'
+        if married_nana_chan.name:
+            married_nana_chan.name += '-senpai'
         married_nana_chan.married = True
         await married_nana_chan.save()
         print(await married_nana_chan.spouses.get())

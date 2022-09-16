@@ -1,6 +1,9 @@
-from datetime import date, datetime
+from dataclasses import fields
+from datetime import datetime
 from types import NoneType, UnionType
 from typing import Any, Callable, Tuple, TypeVar, Union, get_args, get_origin
+
+import akiradb
 
 _T = TypeVar('_T')
 
@@ -27,26 +30,16 @@ def _get_cypher_property_type(field_type):
         return 'boolean'
     elif field_type is float:
         return 'double'
-    elif field_type is bytes:
-        return 'byte'
-    elif field_type is date:
-        return 'date'
     elif field_type is datetime:
         return 'datetime'
     else:
         return 'string'
 
 
-def _get_cypher_value(value):
-    from akiradb.model.proxies import PropertyChangesRecorder
-    if isinstance(value, PropertyChangesRecorder):
-        value = value.value
+def _parse_cypher_properties(properties: dict[str, Any],
+                             model_cls: 'akiradb.model.base_model.MetaModel'):
+    for model_field in fields(model_cls):
+        if model_field.name in model_cls._properties_names and model_field.name not in properties:
+            properties[model_field.name] = None
 
-    if value is None:
-        return "null"
-    elif isinstance(value, date):
-        return f"'{value.isoformat()}'"
-    elif isinstance(value, datetime):
-        return f"'{value.isoformat()}'"
-    else:
-        return repr(value)
+    return model_cls(**properties)

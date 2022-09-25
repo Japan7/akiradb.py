@@ -1,2 +1,2 @@
-from .database_connection import DatabaseConnection
-from .model import BaseModel, relations
+from .database_connection import DatabaseConnection as DatabaseConnection
+from .model import BaseModel as BaseModel, relations as relations
